@@ -25,7 +25,8 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "electron/scanner/**/*"
     ],
     "win": {
       "target": "portable",

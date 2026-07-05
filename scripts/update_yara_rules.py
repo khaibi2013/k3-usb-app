@@ -36,7 +36,15 @@ rule malicious_pe_executable {
         $sus2 = "VirtualAllocEx" ascii
         $sus3 = "WriteProcessMemory" ascii
     condition:
-        $mz at 0 and 2 of ($sus*)
+}
+
+rule k3_yara_demo_rule {
+    meta:
+        description = "Mẫu thử nghiệm YARA cho K3 USB"
+    strings:
+        $s1 = "THIS_IS_A_YARA_TEST_VIRUS_FOR_K3_USB" ascii
+    condition:
+        $s1
 }
 """
 
