@@ -24,7 +24,15 @@ async function initYaraScanner() {
         const wasmBuffer = fsSync.readFileSync(wasmPath);
         yara.initSync({ module: wasmBuffer });
         
-        const rulesPath = path.join(appPath, 'electron', 'scanner', 'k3_rules.yar');
+        const userDataPath = app.getPath('userData');
+        const userRulesPath = path.join(userDataPath, 'k3_rules.yar');
+        let rulesPath = path.join(appPath, 'electron', 'scanner', 'k3_rules.yar');
+        
+        try {
+            await fs.access(userRulesPath);
+            rulesPath = userRulesPath;
+        } catch {}
+        
         const rulesStr = await fs.readFile(rulesPath, 'utf8');
         
         const compiler = new yara.Compiler();
@@ -46,8 +54,8 @@ async function autoUpdateDatabase() {
                 res.on('data', chunk => data += chunk);
                 res.on('end', async () => {
                     if (data.includes('rule ') && data.includes('condition:')) {
-                        const rulesPath = path.join(app.getAppPath(), 'electron', 'scanner', 'k3_rules.yar');
-                        await fs.writeFile(rulesPath, data);
+                        const userRulesPath = path.join(app.getPath('userData'), 'k3_rules.yar');
+                        await fs.writeFile(userRulesPath, data);
                         await initYaraScanner();
                     }
                 });
