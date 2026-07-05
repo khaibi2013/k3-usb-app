@@ -397,7 +397,53 @@ ipcMain.handle('setup-password', async (_, password: string) => {
 ipcMain.handle('setup-decoy', async (_, password: string) => {
     const config = await readConfig();
     if (!config) return false;
+    
+    // Wipe old decoy vault if exists to free up space
+    try {
+        const decoyPath = path.join(getUsbRoot(), '.vault_decoy');
+        await fs.rm(decoyPath, { recursive: true, force: true });
+    } catch (e) {}
+
     config.decoyHash = hashPassword(password);
+    await writeConfig(config);
+    return true;
+});
+
+const getFolderSize = async (dirPath: string): Promise<number> => {
+    let total = 0;
+    try {
+        const items = await fs.readdir(dirPath, { withFileTypes: true });
+        for (const item of items) {
+            const itemPath = path.join(dirPath, item.name);
+            if (item.isDirectory()) {
+                total += await getFolderSize(itemPath);
+            } else {
+                const stat = await fs.stat(itemPath);
+                total += stat.size;
+            }
+        }
+    } catch (e) {}
+    return total;
+};
+
+ipcMain.handle('get-decoy-info', async () => {
+    const config = await readConfig();
+    const isSetup = !!(config && config.decoyHash);
+    const decoyPath = path.join(getUsbRoot(), '.vault_decoy');
+    const sizeBytes = await getFolderSize(decoyPath);
+    return { isSetup, sizeMB: sizeBytes / (1024 * 1024) };
+});
+
+ipcMain.handle('wipe-decoy', async () => {
+    const config = await readConfig();
+    if (!config) return false;
+    
+    try {
+        const decoyPath = path.join(getUsbRoot(), '.vault_decoy');
+        await fs.rm(decoyPath, { recursive: true, force: true });
+    } catch (e) {}
+    
+    delete config.decoyHash;
     await writeConfig(config);
     return true;
 });

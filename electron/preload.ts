@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setupPassword: (password: string) => ipcRenderer.invoke('setup-password', password),
     changePassword: (oldP: string, newP: string) => ipcRenderer.invoke('change-password', oldP, newP),
     setupDecoy: (password: string) => ipcRenderer.invoke('setup-decoy', password),
+    getDecoyInfo: () => ipcRenderer.invoke('get-decoy-info'),
+    wipeDecoy: () => ipcRenderer.invoke('wipe-decoy'),
     login: (password: string) => ipcRenderer.invoke('login', password),
     logout: () => ipcRenderer.invoke('logout'),
     getDashboardStats: () => ipcRenderer.invoke('get-dashboard-stats'),

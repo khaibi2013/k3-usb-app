@@ -8,6 +8,9 @@ const error = ref('');
 const successMsg = ref('');
 const loading = ref(false);
 
+const decoySetup = ref(false);
+const decoySizeMB = ref(0);
+
 const isReadOnly = ref(false);
 const readOnlyLoading = ref(false);
 
@@ -35,7 +38,15 @@ onMounted(async () => {
   if (cfg.appTheme !== undefined) appTheme.value = cfg.appTheme;
   
   isReadOnly.value = await api.checkReadOnly();
+  
+  await loadDecoyInfo();
 });
+
+const loadDecoyInfo = async () => {
+  const info = await api.getDecoyInfo();
+  decoySetup.value = info.isSetup;
+  decoySizeMB.value = info.sizeMB;
+};
 
 const handleSaveGeneral = async () => {
   await api.updateConfig({
@@ -124,6 +135,17 @@ const handleSetupDecoy = async () => {
   decoyPassword.value = '';
   confirmDecoy.value = '';
   loading.value = false;
+  await loadDecoyInfo();
+};
+
+const handleWipeDecoy = async () => {
+  if (!confirm('Hành động này sẽ XOÁ VĨNH VIỄN toàn bộ dữ liệu trong két sắt giả và gỡ bỏ mật khẩu giả. Bạn có chắc chắn?')) return;
+  
+  loading.value = true;
+  await api.wipeDecoy();
+  await loadDecoyInfo();
+  (window as any).showToast('Đã xoá sạch Két sắt giả', 'success');
+  loading.value = false;
 };
 </script>
 
@@ -149,9 +171,20 @@ const handleSetupDecoy = async () => {
         <p v-if="error" class="text-danger" style="font-size: 13px;">{{ error }}</p>
         <p v-if="successMsg" class="text-success" style="font-size: 13px;">{{ successMsg }}</p>
         
-        <button class="btn" :disabled="loading || !decoyPassword" @click="handleSetupDecoy">
-          <Save :size="16" /> LƯU CÀI ĐẶT
-        </button>
+        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;" v-if="decoySetup">
+          <span style="color: var(--accent); font-weight: bold;">Trạng thái: Đang hoạt động</span>
+          <span style="color: var(--text-muted); font-size: 14px;">(Dung lượng: {{ decoySizeMB.toFixed(2) }} MB)</span>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+          <button class="btn" :disabled="loading || !decoyPassword" @click="handleSetupDecoy" style="flex: 1;">
+            <Save :size="16" /> {{ decoySetup ? 'ĐỔI MẬT KHẨU GIẢ' : 'TẠO KÉT GIẢ' }}
+          </button>
+          
+          <button v-if="decoySetup" class="btn btn-danger" :disabled="loading" @click="handleWipeDecoy">
+            XOÁ KÉT GIẢ
+          </button>
+        </div>
       </div>
     </div>
     
