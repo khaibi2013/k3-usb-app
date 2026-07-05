@@ -1,0 +1,40 @@
+name: Tự động cập nhật YARA Rules
+
+on:
+  schedule:
+    # Chạy vào 00:00 mỗi ngày
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Cho phép chạy thủ công từ Github web
+
+jobs:
+  update-yara:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+      
+    - name: Thiết lập môi trường Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Chạy trình thu thập dữ liệu (Scraper)
+      run: python scripts/update_yara_rules.py
+      
+    - name: Kiểm tra thay đổi và Tự động Commit
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        
+        # Kiểm tra xem file k3_rules.yar có bị thay đổi (có rule mới) không
+        if git diff --exit-code --quiet electron/scanner/k3_rules.yar; then
+          echo "Không có mẫu virus nào mới trong hôm nay."
+        else
+          git add electron/scanner/k3_rules.yar
+          git commit -m "Bảo mật: Tự động cập nhật mẫu YARA [$(date +'%Y-%m-%d')]"
+          git push
+          echo "Đã đẩy bản cập nhật YARA mới lên nhánh chính!"
+        fi

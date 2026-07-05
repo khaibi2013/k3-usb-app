@@ -1,0 +1,72 @@
+{
+  "name": "k3-usb-app",
+  "private": true,
+  "version": "0.0.0",
+  "main": "dist-electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"npm run build:electron -- --watch\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "build": "npm run build:vue && npm run build:electron && electron-builder",
+    "build:vue": "vite build",
+    "build:electron": "tsup electron/main.ts electron/preload.ts --format cjs --out-dir dist-electron --external electron",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preview": "vite preview",
+    "pack:win": "npm run build && electron-builder --win --x64",
+    "pack:mac": "npm run build && electron-builder --mac --x64 --arm64"
+  },
+  "build": {
+    "appId": "com.k3.ironvault",
+    "productName": "IronVault",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "${productName}_Windows.exe",
+      "splashImage": "build/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "artifactName": "${productName}_Mac.dmg",
+      "icon": "build/icon.png"
+    }
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.23.0",
+    "@virustotal/yara-x": "^1.15.0",
+    "adm-zip": "^0.5.18",
+    "archiver": "^7.0.1",
+    "archiver-zip-encrypted": "^2.0.0",
+    "chokidar": "^5.0.0",
+    "systeminformation": "^5.31.12",
+    "vue": "^3.5.39"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^24.13.2",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/test-utils": "^2.4.11",
+    "@vue/tsconfig": "^0.9.1",
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3",
+    "jsdom": "^29.1.1",
+    "tsup": "^8.5.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1",
+    "vitest": "^4.1.9",
+    "vue-tsc": "^3.3.5",
+    "wait-on": "^9.0.10"
+  }
+}

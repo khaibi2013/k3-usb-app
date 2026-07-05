@@ -1,0 +1,5 @@
+[autorun]
+open=IronVault.exe
+icon=IronVault.exe
+action=Mở Két Sắt Bảo Mật IronVault
+label=IronVault Secure USB
