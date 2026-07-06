@@ -94,8 +94,8 @@ const getUsbRoot = () => {
         return process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath('exe'));
     } else if (process.platform === 'darwin') {
         // macOS App path: /Volumes/USBName/IronVault.app/Contents/MacOS/IronVault
-        // Go up 3 levels to reach the USB root (/Volumes/USBName/)
-        return path.resolve(app.getPath('exe'), '../../..');
+        // Go up 4 levels to reach the USB root (/Volumes/USBName/)
+        return path.resolve(app.getPath('exe'), '../../../..');
     }
     return path.dirname(app.getPath('exe'));
 };
