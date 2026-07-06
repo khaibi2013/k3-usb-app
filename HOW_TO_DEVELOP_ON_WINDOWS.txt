@@ -1,0 +1,31 @@
+Hướng Dẫn Phát Triển Ứng Dụng IronVault Trên Windows
+======================================================
+
+Để tiếp tục code ứng dụng này trên môi trường Windows vào ngày mai sau khi bạn tải (pull) code từ Git xuống, hãy làm theo các bước đơn giản sau:
+
+### Bước 1: Tải Code Mới Nhất Từ Git
+Mở ứng dụng Command Prompt (CMD), PowerShell hoặc Git Bash, di chuyển tới thư mục bạn muốn lưu dự án (ví dụ: ổ D:) và chạy lệnh:
+> git clone <đường_dẫn_git_của_bạn_nếu_chưa_clone>
+> cd k3-usb-app
+
+(Nếu bạn đã clone dự án từ trước, chỉ cần vào thư mục `k3-usb-app` và chạy lệnh: `git pull` để cập nhật code mới nhất vừa được chỉnh sửa trên Mac).
+
+### Bước 2: Cài Đặt Các Gói Thư Viện (Dependencies)
+Cài đặt Node.js (phiên bản 18 hoặc 20 trở lên). 
+Trong thư mục `k3-usb-app`, hãy chạy lệnh sau để tải tất cả thư viện cần thiết:
+> npm install
+
+### Bước 3: Chạy Môi Trường Lập Trình (Dev Mode)
+Sau khi tải xong thư viện, bạn dùng lệnh sau để vừa bật giao diện lập trình, vừa chạy Electron:
+> npm run dev
+
+Code trên Windows sẽ tự động hot-reload y hệt như trên Mac. Mọi tính năng bảo mật, mã hóa, tìm kiếm (cả dấu `\` của Windows) đều đã được tối ưu hóa để chạy xuyên nền tảng.
+
+### Bước 4: Đóng Gói (Build) Ra File .EXE Chạy Trực Tiếp Trên USB
+Khi bạn code xong và muốn xuất ra một file chạy `.exe` dạng Portable (Không cần cài đặt, copy thẳng vào USB là chạy), hãy chạy lệnh:
+> npm run pack:win
+
+Sau khi lệnh chạy xong 100%, hãy vào thư mục `release/` bên trong dự án. Bạn sẽ thấy một file tên là `IronVault_Windows.exe`.
+Hãy copy file `.exe` này vào thẳng USB (cùng với thư mục `.vault` nếu có) là đã có thể chạy trực tiếp IronVault từ USB trên mọi máy Windows!
+
+Chúc bạn lập trình vui vẻ!

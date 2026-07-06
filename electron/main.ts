@@ -160,28 +160,47 @@ const writeHistory = async (history: any[]) => {
 const pollUSBDevices = () => {
     return new Promise<any[]>((resolve) => {
         if (process.platform === 'win32') {
-            exec('wmic diskdrive where interfacetype="USB" get caption, pnpdeviceid, serialnumber /value', (err, stdout) => {
-                if (err) return resolve([]);
-                const devices = [];
-                let currentDevice: any = {};
-                for (const line of stdout.split('\n')) {
-                    const t = line.trim();
-                    if (!t) {
+            exec('powershell -NoProfile -Command "Get-CimInstance Win32_DiskDrive | Where-Object InterfaceType -eq \\\'USB\\\' | Select-Object Caption, PNPDeviceID, SerialNumber | ConvertTo-Json"', (err, stdout) => {
+                if (err || !stdout.trim()) {
+                    exec('wmic diskdrive where interfacetype="USB" get caption, pnpdeviceid, serialnumber /value', (err2, stdout2) => {
+                        if (err2) return resolve([]);
+                        const devices = [];
+                        let currentDevice: any = {};
+                        for (const line of stdout2.split('\n')) {
+                            const t = line.trim();
+                            if (!t) {
+                                if (currentDevice.Caption) devices.push(currentDevice);
+                                currentDevice = {};
+                                continue;
+                            }
+                            const [key, ...vals] = t.split('=');
+                            if (key && vals.length) currentDevice[key.trim()] = vals.join('=').trim();
+                        }
                         if (currentDevice.Caption) devices.push(currentDevice);
-                        currentDevice = {};
-                        continue;
-                    }
-                    const [key, ...vals] = t.split('=');
-                    if (key && vals.length) currentDevice[key.trim()] = vals.join('=').trim();
+                        
+                        resolve(devices.map(d => ({
+                            name: d.Caption || 'USB Device',
+                            type: 'USB Storage',
+                            serial: d.SerialNumber || 'Unknown',
+                            deviceId: d.PNPDeviceID || 'Unknown'
+                        })));
+                    });
+                    return;
                 }
-                if (currentDevice.Caption) devices.push(currentDevice);
                 
-                resolve(devices.map(d => ({
-                    name: d.Caption || 'USB Device',
-                    type: 'USB Storage',
-                    serial: d.SerialNumber || 'Unknown',
-                    deviceId: d.PNPDeviceID || 'Unknown'
-                })));
+                try {
+                    let data = JSON.parse(stdout);
+                    if (!Array.isArray(data)) data = [data];
+                    const devices = data.filter((d: any) => d && d.Caption).map((d: any) => ({
+                        name: d.Caption || 'USB Device',
+                        type: 'USB Storage',
+                        serial: d.SerialNumber || 'Unknown',
+                        deviceId: d.PNPDeviceID || 'Unknown'
+                    }));
+                    resolve(devices);
+                } catch (e) {
+                    resolve([]);
+                }
             });
         } else if (process.platform === 'darwin') {
             exec('system_profiler SPUSBDataType -json', (err, stdout) => {
@@ -191,12 +210,13 @@ const pollUSBDevices = () => {
                     const devices: any[] = [];
                     const findDevices = (items: any[]) => {
                         for (const item of items) {
-                            if (item.serial_num || (item.name && item.name.toLowerCase().includes('usb'))) {
-                                if (item.serial_num) {
+                            if (item.serial_num || item.device_id) {
+                                // Ignore internal USB devices if needed, but here we collect all
+                                if (!item.name?.toLowerCase().includes('internal')) {
                                     devices.push({
                                         name: item._name || item.name || 'USB Device',
                                         type: 'USB Storage',
-                                        serial: item.serial_num,
+                                        serial: item.serial_num || 'Unknown',
                                         deviceId: item.device_id || item.serial_num
                                     });
                                 }
@@ -205,7 +225,31 @@ const pollUSBDevices = () => {
                         }
                     };
                     if (data.SPUSBDataType) findDevices(data.SPUSBDataType);
-                    resolve(devices);
+                    
+                    // Thêm kiểm tra Storage cho macOS để nhận diện được các ổ đĩa ngoài (hoặc ảnh đĩa)
+                    exec('system_profiler SPStorageDataType -json', (err2, stdout2) => {
+                        if (!err2) {
+                            try {
+                                const storageData = JSON.parse(stdout2);
+                                if (storageData.SPStorageDataType) {
+                                    for (const item of storageData.SPStorageDataType) {
+                                        if (item.physical_drive && item.physical_drive.is_internal_disk === "no") {
+                                            const deviceId = item.volume_uuid || item.bsd_name;
+                                            if (!devices.find(d => d.deviceId === deviceId)) {
+                                                devices.push({
+                                                    name: item._name || item.name || 'External Drive',
+                                                    type: item.physical_drive.protocol || 'External Storage',
+                                                    serial: item.volume_uuid || 'Unknown',
+                                                    deviceId: deviceId
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (e) {}
+                        }
+                        resolve(devices);
+                    });
                 } catch { resolve([]); }
             });
         } else {
@@ -224,6 +268,7 @@ async function setupVaultWatcher(config: any) {
     }
     
     if (!currentKey || isDecoyMode) return;
+    if (config.autoEncryptEnabled === false) return;
     
     const folderName = config.autoEncryptFolder || 'BaoMat';
     if (!folderName.trim()) return;
@@ -243,32 +288,49 @@ async function setupVaultWatcher(config: any) {
     });
     
     vaultWatcher.on('add', async (filePath) => {
-        try {
-            const stat = await fs.stat(filePath);
-            let forceRaw = false;
-            const sizeMB = stat.size / (1024 * 1024);
-            if (config.maxEncryptSize > 0 && sizeMB > config.maxEncryptSize) {
-                forceRaw = true;
-            }
-            
-            const fakeEvent = {
-                sender: {
-                    send: (channel: string, data: any) => {
-                        BrowserWindow.getAllWindows().forEach(w => w.webContents.send(channel, data));
-                    }
+        let retries = 10;
+        while (retries > 0) {
+            try {
+                const stat = await fs.stat(filePath);
+                let forceRaw = false;
+                const sizeMB = stat.size / (1024 * 1024);
+                if (config.maxEncryptSize > 0 && sizeMB > config.maxEncryptSize) {
+                    forceRaw = true;
                 }
-            };
-            
-            BrowserWindow.getAllWindows().forEach(w => w.webContents.send('encryption-progress', { file: path.basename(filePath), status: forceRaw ? 'copying raw (background)' : 'encrypting (background)' }));
-            
-            await processEncryption(fakeEvent, filePath, true, '/', true, forceRaw);
-            
-            BrowserWindow.getAllWindows().forEach(w => {
-                w.webContents.send('encryption-progress', { file: 'Done', status: 'done' });
-                w.webContents.send('auto-encrypt-done');
-            });
-        } catch (e: any) {
-            console.error('Auto encrypt error:', e);
+                
+                const fakeEvent = {
+                    sender: {
+                        send: (channel: string, data: any) => {
+                            BrowserWindow.getAllWindows().forEach(w => w.webContents.send(channel, data));
+                        }
+                    }
+                };
+                
+                const relPath = path.relative(watchDir, filePath);
+                let virtualDir = '/';
+                if (relPath.includes(path.sep)) {
+                    virtualDir = '/' + path.dirname(relPath).split(path.sep).join('/');
+                }
+                
+                BrowserWindow.getAllWindows().forEach(w => w.webContents.send('encryption-progress', { file: path.basename(filePath), status: forceRaw ? 'copying raw (background)' : 'encrypting (background)' }));
+                
+                await processEncryption(fakeEvent, filePath, true, virtualDir, true, forceRaw);
+                
+                BrowserWindow.getAllWindows().forEach(w => {
+                    w.webContents.send('encryption-progress', { file: 'Done', status: 'done' });
+                    w.webContents.send('auto-encrypt-done');
+                });
+                break;
+            } catch (e: any) {
+                if ((e.code === 'EBUSY' || e.code === 'ENOENT' || e.code === 'EPERM') && retries > 1) {
+                    retries--;
+                    await new Promise(r => setTimeout(r, 1000));
+                } else {
+                    console.error('Auto encrypt error:', e);
+                    BrowserWindow.getAllWindows().forEach(w => w.webContents.send('encryption-progress', { file: 'Lỗi', status: 'done' }));
+                    break;
+                }
+            }
         }
     });
 }

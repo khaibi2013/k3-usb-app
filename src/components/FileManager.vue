@@ -37,7 +37,8 @@ const globalSettings = ref({
   showHidden: false,
   autoClearHistory: false,
   cleanSystemJunk: true,
-  autoEncryptFolder: 'BaoMat'
+  autoEncryptFolder: 'BaoMat',
+  autoEncryptEnabled: true
 });
 
 
@@ -56,6 +57,7 @@ const loadGlobalSettings = async () => {
     globalSettings.value = {
       ...globalSettings.value,
       ...config,
+      autoEncryptEnabled: config.autoEncryptEnabled !== false,
       visible: globalSettings.value.visible
     };
   }
@@ -68,7 +70,8 @@ const saveGlobalSettings = async () => {
     showHidden: globalSettings.value.showHidden,
     autoClearHistory: globalSettings.value.autoClearHistory,
     cleanSystemJunk: globalSettings.value.cleanSystemJunk,
-    autoEncryptFolder: globalSettings.value.autoEncryptFolder
+    autoEncryptFolder: globalSettings.value.autoEncryptFolder,
+    autoEncryptEnabled: globalSettings.value.autoEncryptEnabled
   });
   globalSettings.value.visible = false;
   (window as any).showToast('Đã lưu cài đặt chung', 'success');
@@ -111,12 +114,29 @@ const vaultItems = computed(() => {
   const query = vaultSearchQuery.value.trim().toLowerCase();
   
   if (query) {
+    const matchedFolders = new Set();
     for (const f of allVaultFiles.value) {
       const orig = f.originalName || f.name;
       const fileName = orig.split('/').pop() || '';
-      if (fileName !== '.k3empty' && fileName.toLowerCase().includes(query)) {
-        if (!globalSettings.value.showHidden && fileName.startsWith('.')) continue;
-        items.push({ ...f, isDirectory: false, displayName: fileName, originalPath: orig });
+      
+      // Match against the entire path, not just the file name
+      if (orig.toLowerCase().includes(query)) {
+        if (fileName === '.k3empty') {
+          // This is a directory marker
+          const dirParts = orig.split('/');
+          dirParts.pop(); // remove .k3empty
+          const dirName = dirParts.pop() || '';
+          if (!globalSettings.value.showHidden && dirName.startsWith('.')) continue;
+          
+          const dirPath = orig.split('/').slice(0, -1).join('/');
+          if (!matchedFolders.has(dirPath)) {
+            matchedFolders.add(dirPath);
+            items.push({ ...f, isDirectory: true, name: dirName, displayName: dirName, size: 0, originalName: orig, originalPath: dirPath });
+          }
+        } else {
+          if (!globalSettings.value.showHidden && fileName.startsWith('.')) continue;
+          items.push({ ...f, isDirectory: false, displayName: fileName, originalPath: orig });
+        }
       }
     }
     return items;
@@ -156,9 +176,14 @@ const goUpVaultDir = () => {
   selectedVaultFiles.value.clear();
 };
 
-const openVaultDir = (dirName: string) => {
-  currentVaultDir.value = currentVaultDir.value === '/' ? dirName : currentVaultDir.value + '/' + dirName;
+const openVaultDir = (dirName: string, absolutePath?: string) => {
+  if (absolutePath) {
+    currentVaultDir.value = absolutePath.startsWith('/') ? absolutePath : '/' + absolutePath;
+  } else {
+    currentVaultDir.value = currentVaultDir.value === '/' ? dirName : currentVaultDir.value + '/' + dirName;
+  }
   selectedVaultFiles.value.clear();
+  vaultSearchQuery.value = ''; // clear search when opening a folder
 };
 
 const currentLocalDir = ref<string>('');
@@ -303,6 +328,11 @@ onMounted(() => {
   if (api.onEncryptionProgress) {
     api.onEncryptionProgress((data: any) => {
       progressData.value = data;
+      if (data.status !== 'done' && data.status !== 'done (background)') {
+        processingStatus.value = 'Đang tự động mã hóa từ thư mục Bảo Mật...';
+      } else {
+        processingStatus.value = '';
+      }
     });
   }
   
@@ -829,10 +859,17 @@ const formatVault = async () => {
                 @click="handleLocalClick($event, f)" @dblclick="f.isDirectory ? openLocalDir(f.path) : null"
                 @contextmenu.prevent.stop="showContextMenu($event, f, true)">
                 <td>
-                  <div class="file-name">
-                    <Folder v-if="f.isDirectory" :size="16" color="#3b82f6" />
-                    <File v-else :size="16" color="var(--text-muted)" />
-                    <span class="truncate">{{ f.name }}</span>
+                  <div class="file-name" style="align-items: flex-start; gap: 8px;">
+                    <div style="margin-top: 2px;">
+                      <Folder v-if="f.isDirectory" :size="16" color="#3b82f6" />
+                      <File v-else :size="16" color="var(--text-muted)" />
+                    </div>
+                    <div style="display: flex; flex-direction: column; overflow: hidden; width: 100%;">
+                      <span class="truncate" :title="f.name">{{ f.name }}</span>
+                      <span v-if="isSearchingLocal && f.path" class="text-muted truncate" style="font-size: 11px; margin-top: 1px;" :title="f.path">
+                        {{ f.path.substring(0, Math.max(f.path.lastIndexOf('/'), f.path.lastIndexOf('\\'))) || f.path }}
+                      </span>
+                    </div>
                   </div>
                 </td>
                 <td class="text-right text-muted">{{ f.isDirectory ? '' : formatBytes(f.size) }}</td>
@@ -878,12 +915,19 @@ const formatVault = async () => {
             <thead><tr><th>Tên tệp gốc</th><th width="80">Size</th></tr></thead>
             <tbody>
               <tr v-for="f in vaultItems" :key="f.name" :class="{ selected: selectedVaultFiles.has(f) }" 
-                @click="handleVaultClick($event, f)" @dblclick="f.isDirectory ? openVaultDir(f.name) : openFileIfText(f)" @contextmenu.prevent.stop="showContextMenu($event, f, false)">
+                @click="handleVaultClick($event, f)" @dblclick="f.isDirectory ? openVaultDir(f.name, vaultSearchQuery ? f.originalPath : undefined) : openFileIfText(f)" @contextmenu.prevent.stop="showContextMenu($event, f, false)">
                 <td>
-                  <div class="file-name">
-                    <Folder v-if="f.isDirectory" :size="16" color="var(--accent)" />
-                    <Lock v-else :size="16" color="var(--accent)" />
-                    <span class="truncate">{{ f.displayName.replace('.k3enc', '').replace('.k3dir', '') }}</span>
+                  <div class="file-name" style="align-items: flex-start; gap: 8px;">
+                    <div style="margin-top: 2px;">
+                      <Folder v-if="f.isDirectory" :size="16" color="var(--accent)" />
+                      <Lock v-else :size="16" color="var(--accent)" />
+                    </div>
+                    <div style="display: flex; flex-direction: column; overflow: hidden; width: 100%;">
+                      <span class="truncate" :title="f.displayName.replace('.k3enc', '').replace('.k3dir', '')">{{ f.displayName.replace('.k3enc', '').replace('.k3dir', '') }}</span>
+                      <span v-if="vaultSearchQuery && f.originalPath" class="text-muted truncate" style="font-size: 11px; margin-top: 1px;" :title="f.originalPath">
+                        Két/{{ f.originalPath.split('/').slice(0, -1).join('/') }}
+                      </span>
+                    </div>
                   </div>
                 </td>
                 <td class="text-right text-muted">{{ f.isDirectory ? '' : formatBytes(f.size) }}</td>
@@ -1020,9 +1064,9 @@ const formatVault = async () => {
           <div style="display: flex; flex-direction: column; gap: 15px;">
             <div class="setting-item" style="display: flex; flex-direction: column; gap: 5px;">
               <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; cursor: pointer;">
-                <input type="checkbox" checked disabled style="accent-color: var(--accent);" />
+                <input type="checkbox" v-model="globalSettings.autoEncryptEnabled" style="accent-color: var(--accent);" />
                 Mã hóa dữ liệu được sao chép sang USB trong Thư mục:
-                <input type="text" v-model="globalSettings.autoEncryptFolder" class="input-field" style="width: 150px; margin: 0; padding: 4px;" />
+                <input type="text" v-model="globalSettings.autoEncryptFolder" :disabled="!globalSettings.autoEncryptEnabled" class="input-field" style="width: 150px; margin: 0; padding: 4px;" />
               </label>
               <div style="padding-left: 25px; color: var(--text-muted); font-size: 13px;">
                 - Tất cả dữ liệu sao chép vào thư mục này trên USB sẽ tự động được mã hóa (Bảo vệ thời gian thực).
