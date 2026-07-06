@@ -28,4 +28,12 @@ Khi bạn code xong và muốn xuất ra một file chạy `.exe` dạng Portabl
 Sau khi lệnh chạy xong 100%, hãy vào thư mục `release/` bên trong dự án. Bạn sẽ thấy một file tên là `IronVault_Windows.exe`.
 Hãy copy file `.exe` này vào thẳng USB (cùng với thư mục `.vault` nếu có) là đã có thể chạy trực tiếp IronVault từ USB trên mọi máy Windows!
 
+---
+### 🤖 BÍ KÍP DÙNG ANTIGRAVITY IDE TRÊN WINDOWS (NGÀY MAI)
+Nếu ngày mai bạn dùng thẳng Antigravity IDE trên Windows, bạn chỉ cần mở IDE lên, tạo một thư mục trống tên là `k3-usb-app`, và copy-paste **nguyên văn câu lệnh dưới đây** gửi cho AI:
+
+*"Chào AI, hãy chạy lệnh `git clone https://github.com/khaibi2013/k3-usb-app.git .` để tải toàn bộ mã nguồn về thư mục hiện tại. Tiếp theo, hãy tự động chạy lệnh `npm install` để cài đặt thư viện. Cuối cùng, bắt buộc phải đọc thật kỹ file `AI_CONTEXT.md` vừa được tải về để hiểu toàn bộ ngữ cảnh dự án, các lỗi Cross-platform đã xử lý hôm qua trước khi chúng ta bắt đầu code tiếp."*
+
+AI sẽ tự động làm toàn bộ mọi việc từ A-Z cho bạn!
+
 Chúc bạn lập trình vui vẻ!
