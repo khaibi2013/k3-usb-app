@@ -1,30 +1,13 @@
-const chokidar = require('chokidar');
-const path = require('path');
 const fs = require('fs');
-
-const watchDir = path.join(__dirname, 'BaoMat');
-fs.mkdirSync(watchDir, { recursive: true });
-
-const vaultWatcher = chokidar.watch(watchDir, {
-    persistent: true,
-    ignoreInitial: true,
-    awaitWriteFinish: {
-        stabilityThreshold: 1000,
-        pollInterval: 100
-    }
-});
-
-vaultWatcher.on('add', (filePath) => {
-    console.log('Detected add:', filePath);
-});
-
-console.log('Watching:', watchDir);
-
-setTimeout(() => {
-    fs.writeFileSync(path.join(watchDir, 'test_added.txt'), 'test data');
-    console.log('Created test_added.txt');
-}, 2000);
-
-setTimeout(() => {
-    process.exit(0);
-}, 5000);
+const path = require('path');
+const config = { autoEncryptFolder: 'baomat1', autoEncryptEnabled: true };
+const getUsbRoot = () => path.join(__dirname, 'test_usb');
+if (!fs.existsSync(getUsbRoot())) fs.mkdirSync(getUsbRoot());
+const folderName = config.autoEncryptFolder || 'BaoMat';
+const watchDir = path.join(getUsbRoot(), folderName);
+try {
+    fs.mkdirSync(watchDir, { recursive: true });
+    console.log("Created:", watchDir);
+} catch(e) {
+    console.log("Error:", e);
+}
