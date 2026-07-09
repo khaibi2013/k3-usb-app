@@ -1,11 +1,9 @@
-using System.IO;
-using System.Security.Cryptography;
-using System.Threading;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System;
-using System.Linq;
 using System.Drawing;
+using System.IO;
+using System.Security.Cryptography;
 
 namespace AnToanUSB
 {
@@ -18,7 +16,6 @@ namespace AnToanUSB
 
     public static class AntivirusScanner
     {
-        // Local offline signatures used before handing a file to the vault.
         private static readonly HashSet<string> sha256Signatures = new HashSet<string> {
             "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f" // EICAR SHA256
         };
@@ -33,89 +30,91 @@ namespace AnToanUSB
 
         public static bool IsSafeFile(string filePath)
         {
-            string fileName = Path.GetFileName(filePath).ToLower();
+            string fileName = Path.GetFileName(filePath).ToLowerInvariant();
             if (fileName.EndsWith(".exe") && Path.GetFileNameWithoutExtension(fileName).Contains(".")) return false;
+
             string ext = Path.GetExtension(fileName);
             if (riskyExtensions.Contains(ext)) return false;
 
-            try {
-                if (new FileInfo(filePath).Length < 512) {
+            try
+            {
+                if (new FileInfo(filePath).Length < 512)
+                {
                     string content = File.ReadAllText(filePath);
                     if (content.Contains(@"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*")) return false;
                 }
-            } catch { }
+            }
+            catch { }
 
             return true;
         }
 
         public static ScanResult ScanFileReal(string filePath)
         {
-            if (!IsSafeFile(filePath)) {
-                return new ScanResult { FilePath = filePath, Status = "Nhiễm", VirusName = "Suspicious.Extension.Gen" };
-            }
+            if (!IsSafeFile(filePath))
+                return Infected(filePath, "Suspicious.Extension.Gen");
 
-            try {
-                // Layer 2: Hash Check
+            try
+            {
                 using (var sha256 = SHA256.Create())
                 using (var md5 = MD5.Create())
-                using (var stream = File.OpenRead(filePath)) {
+                using (var stream = File.OpenRead(filePath))
+                {
                     byte[] hash = sha256.ComputeHash(stream);
-                    string sha256String = System.BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-                    if (sha256Signatures.Contains(sha256String)) {
-                        return new ScanResult { FilePath = filePath, Status = "Nhiễm", VirusName = "Trojan.Generic.Hash" };
-                    }
+                    string sha256String = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+                    if (sha256Signatures.Contains(sha256String))
+                        return Infected(filePath, "Trojan.Generic.Hash");
 
                     stream.Position = 0;
                     byte[] md5Hash = md5.ComputeHash(stream);
-                    string md5String = System.BitConverter.ToString(md5Hash).Replace("-", "").ToLowerInvariant();
-                    if (md5Signatures.Contains(md5String)) {
-                        return new ScanResult { FilePath = filePath, Status = "Nhiễm", VirusName = "Trojan.Generic.Hash" };
+                    string md5String = BitConverter.ToString(md5Hash).Replace("-", "").ToLowerInvariant();
+                    if (md5Signatures.Contains(md5String))
+                        return Infected(filePath, "Trojan.Generic.Hash");
+                }
+
+                string ext = Path.GetExtension(filePath).ToLowerInvariant();
+                if (ext == ".exe" || ext == ".dll")
+                {
+                    if (ext == ".exe" && LooksLikeFolderIconExecutable(filePath))
+                        return Infected(filePath, "Heur.FolderIcon.Executable");
+
+                    if (new FileInfo(filePath).Length <= 64L * 1024L * 1024L)
+                    {
+                        double entropy = CalculateEntropy(filePath);
+                        if (entropy > 7.2)
+                            return Infected(filePath, "Heur.Packed.Entropy");
                     }
                 }
 
-                // Layer 3: Entropy Check for executables
-                string ext = Path.GetExtension(filePath).ToLower();
-                if (ext == ".exe" || ext == ".dll") {
-                    if (ext == ".exe" && LooksLikeFolderIconExecutable(filePath)) {
-                        return new ScanResult { FilePath = filePath, Status = "Nhiễm", VirusName = "Heur.FolderIcon.Executable" };
-                    }
-
-                    double entropy = CalculateEntropy(filePath);
-                    if (entropy > 7.2) { // Highly packed/encrypted
-                        return new ScanResult { FilePath = filePath, Status = "Nhiễm", VirusName = "Heur.Packed.Entropy" };
-                    }
-                }
-
-                // Layer 4: Windows Defender Core integration, if available.
-                string defenderThreat = ScanWithDefender(filePath);
-                if (!string.IsNullOrEmpty(defenderThreat)) {
-                    return new ScanResult { FilePath = filePath, Status = "Nhiễm", VirusName = defenderThreat };
-                }
-
-                // Layer 5: Optional ClamAV clamscan.exe integration.
+                // Third-party scanner hook. Windows Defender is intentionally skipped.
                 string clamThreat = ScanWithClamAv(filePath);
-                if (!string.IsNullOrEmpty(clamThreat)) {
-                    return new ScanResult { FilePath = filePath, Status = "Nhiễm", VirusName = clamThreat };
-                }
-
-            } catch {
+                if (!string.IsNullOrEmpty(clamThreat))
+                    return Infected(filePath, clamThreat);
+            }
+            catch
+            {
                 return new ScanResult { FilePath = filePath, Status = "Lỗi", VirusName = "Không thể đọc file" };
             }
+
             return new ScanResult { FilePath = filePath, Status = "Sạch", VirusName = "" };
         }
 
         public static bool IsEngineAvailable()
         {
-            return !string.IsNullOrEmpty(FindDefenderPath());
+            return !string.IsNullOrEmpty(FindClamScanPath());
         }
 
         public static string GetEngineInfo()
         {
-            string defenderPath = FindDefenderPath();
             string clamPath = FindClamScanPath();
-            return string.IsNullOrEmpty(defenderPath)
-                ? "K3-AV Offline + Heuristic" + (string.IsNullOrEmpty(clamPath) ? ". Defender/ClamAV: không tìm thấy." : " + ClamAV: " + clamPath)
-                : "K3-AV Offline + Heuristic + Windows Defender CLI: " + defenderPath + (string.IsNullOrEmpty(clamPath) ? "" : " + ClamAV: " + clamPath);
+            return string.IsNullOrEmpty(clamPath)
+                ? "K3-AV Offline + Heuristic. Windows Defender: bỏ qua. Engine bên thứ 3: chưa tìm thấy."
+                : "K3-AV Offline + Heuristic + ClamAV: " + clamPath + ". Windows Defender: bỏ qua.";
+        }
+
+        private static ScanResult Infected(string filePath, string virusName)
+        {
+            return new ScanResult { FilePath = filePath, Status = "Nhiễm", VirusName = virusName };
         }
 
         private static double CalculateEntropy(string filePath)
@@ -128,43 +127,13 @@ namespace AnToanUSB
 
             double entropy = 0.0;
             double length = fileBytes.Length;
-            foreach (int count in counts) {
+            foreach (int count in counts)
+            {
                 if (count == 0) continue;
                 double p = count / length;
                 entropy -= p * Math.Log(p, 2);
             }
             return entropy;
-        }
-
-        private static string ScanWithDefender(string filePath)
-        {
-            try {
-                string defenderPath = FindDefenderPath();
-                if (string.IsNullOrEmpty(defenderPath)) return "";
-
-                ProcessStartInfo psi = new ProcessStartInfo {
-                    FileName = defenderPath,
-                    Arguments = string.Format("-Scan -ScanType 3 -File \"{0}\" -DisableRemediation", filePath),
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
-                using (Process proc = Process.Start(psi)) {
-                    if (!proc.WaitForExit(15000)) {
-                        try { proc.Kill(); } catch { }
-                        return "";
-                    }
-
-                    string output = "";
-                    try { output = (proc.StandardOutput.ReadToEnd() + " " + proc.StandardError.ReadToEnd()).Trim(); } catch { }
-                    if (proc.ExitCode == 2 || output.IndexOf("found threats", StringComparison.OrdinalIgnoreCase) >= 0 || output.IndexOf("Threat", StringComparison.OrdinalIgnoreCase) >= 0) {
-                        return "Win32.Defender.Detected";
-                    }
-                    return "";
-                }
-            } catch { return ""; }
         }
 
         private static string ScanWithClamAv(string filePath)
@@ -184,6 +153,7 @@ namespace AnToanUSB
                     RedirectStandardOutput = true,
                     RedirectStandardError = true
                 };
+
                 using (Process proc = Process.Start(psi))
                 {
                     if (!proc.WaitForExit(15000))
@@ -206,6 +176,7 @@ namespace AnToanUSB
             if (string.IsNullOrWhiteSpace(output)) return "ClamAV.Detected";
             int idx = output.IndexOf(" FOUND", StringComparison.OrdinalIgnoreCase);
             if (idx <= 0) return "ClamAV.Detected";
+
             int colon = output.LastIndexOf(':', idx);
             if (colon >= 0 && colon < idx - 1)
             {
@@ -224,6 +195,7 @@ namespace AnToanUSB
                 @"C:\Program Files\ClamAV\clamscan.exe",
                 @"C:\Program Files (x86)\ClamAV\clamscan.exe"
             };
+
             foreach (string candidate in candidates)
                 if (File.Exists(candidate)) return candidate;
 
@@ -272,32 +244,6 @@ namespace AnToanUSB
                 }
                 return similar / (double)total;
             }
-        }
-
-        private static string FindDefenderPath()
-        {
-            string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-            string platformRoot = Path.Combine(programData, @"Microsoft\Windows Defender\Platform");
-            try
-            {
-                if (Directory.Exists(platformRoot))
-                {
-                    foreach (string dir in Directory.GetDirectories(platformRoot).OrderByDescending(d => d))
-                    {
-                        string candidate = Path.Combine(dir, "MpCmdRun.exe");
-                        if (File.Exists(candidate)) return candidate;
-                    }
-                }
-            }
-            catch { }
-
-            string[] candidates = {
-                @"C:\Program Files\Windows Defender\MpCmdRun.exe",
-                @"C:\Program Files\Microsoft Defender\MpCmdRun.exe"
-            };
-            foreach (string candidate in candidates)
-                if (File.Exists(candidate)) return candidate;
-            return "";
         }
     }
 }
