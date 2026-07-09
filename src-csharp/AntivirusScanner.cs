@@ -152,7 +152,7 @@ namespace AnToanUSB
                     RedirectStandardError = true
                 };
                 using (Process proc = Process.Start(psi)) {
-                    if (!proc.WaitForExit(60000)) {
+                    if (!proc.WaitForExit(15000)) {
                         try { proc.Kill(); } catch { }
                         return "";
                     }
@@ -186,7 +186,7 @@ namespace AnToanUSB
                 };
                 using (Process proc = Process.Start(psi))
                 {
-                    if (!proc.WaitForExit(60000))
+                    if (!proc.WaitForExit(15000))
                     {
                         try { proc.Kill(); } catch { }
                         return "";

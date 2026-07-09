@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text;
 using System.Diagnostics;
+using System.Collections.Generic;
 
 namespace AnToanUSB
 {
@@ -201,27 +202,28 @@ namespace AnToanUSB
                     if (!string.IsNullOrEmpty(snapshot.SnapshotDir))
                         AddLog("INFO", string.Format("Đã tạo snapshot phục hồi: {0} mục, backup {1} file ({2} KB). {3}", snapshot.ItemCount, snapshot.BackedUpFileCount, snapshot.BackedUpBytes / 1024, snapshot.SnapshotDir));
 
-                    string[] files;
-                    if (File.Exists(currentScanDir)) {
-                        files = new string[] { currentScanDir };
-                    } else {
-                        files = Directory.GetFiles(currentScanDir, "*", SearchOption.AllDirectories);
-                    }
-                    int maxFiles = files.Length;
+                    int maxFiles = CountScanFiles(currentScanDir, scanCts.Token);
                     progressBar.Maximum = maxFiles > 0 ? maxFiles : 1;
                     progressBar.Value = 0;
                     totalCount = maxFiles;
 
                     await Task.Run(() => {
-                        for (int i = 0; i < maxFiles; i++) {
+                        int scanned = 0;
+                        DateTime lastUi = DateTime.MinValue;
+                        foreach (string file in EnumerateScanFiles(currentScanDir, scanCts.Token)) {
                             if (scanCts.Token.IsCancellationRequested) break;
-                            string file = files[i];
-                            
-                            this.Invoke(new Action(() => {
-                                lblStatus1.Text = string.Format("Đang quét toàn diện: {0}/{1} tệp ({2}%)", i + 1, maxFiles, (int)((i + 1) * 100.0 / maxFiles));
-                                lblStatus2.Text = string.Format("Đang quét: {0}", file);
-                                progressBar.Value = i + 1;
-                            }));
+                            scanned++;
+
+                            if ((DateTime.Now - lastUi).TotalMilliseconds > 150) {
+                                lastUi = DateTime.Now;
+                                BeginInvoke(new Action(() => {
+                                    int percent = maxFiles > 0 ? (int)(Math.Min(scanned, maxFiles) * 100.0 / maxFiles) : 0;
+                                    lblStatus1.Text = string.Format("Đang quét toàn diện: {0}/{1} tệp ({2}%)", scanned, maxFiles, percent);
+                                    lblStatus2.Text = string.Format("Đang quét: {0}", file);
+                                    progressBar.Value = Math.Min(scanned, progressBar.Maximum);
+                                    lblStats.Text = BuildScanStatsText();
+                                }));
+                            }
 
                             var res = AntivirusScanner.ScanFileReal(file);
                             
@@ -229,10 +231,12 @@ namespace AnToanUSB
                             else if (res.Status == "Lỗi") skippedCount++;
                             else {
                                 infectedCount++;
-                                this.Invoke(new Action(() => {
+                                BeginInvoke(new Action(() => {
                                     var item = new ListViewItem(new[] { "", Path.GetFileName(file), file, res.Status, res.VirusName });
                                     item.ForeColor = Color.Red;
                                     lvResults.Items.Add(item);
+                                    if (lvResults.Items.Count > 500)
+                                        lvResults.Items.RemoveAt(0);
                                     AddLog("WARN", string.Format("Phát hiện {0}: {1}", res.VirusName, file));
                                     
                                     if (chkAutoDelete.Checked) {
@@ -251,11 +255,13 @@ namespace AnToanUSB
                                     }
                                 }));
                             }
-                            
-                            this.Invoke(new Action(() => {
-                                lblStats.Text = string.Format("Sạch: {0} | Nhiễm: {1} | Bỏ qua: {2} | Tổng: {3} | Thời gian: {4}", cleanCount, infectedCount, skippedCount, totalCount, (DateTime.Now - startTime).ToString(@"hh\:mm\:ss"));
-                            }));
                         }
+                        BeginInvoke(new Action(() => {
+                            lblStatus1.Text = scanCts.Token.IsCancellationRequested ? "Đã dừng quét!" : "Đã quét xong!";
+                            lblStatus2.Text = "";
+                            progressBar.Value = Math.Min(progressBar.Maximum, Math.Max(progressBar.Value, Math.Min(scanned, progressBar.Maximum)));
+                            lblStats.Text = BuildScanStatsText();
+                        }));
                     }, scanCts.Token);
                 }
                 catch (UnauthorizedAccessException) {
@@ -415,6 +421,96 @@ namespace AnToanUSB
         private string EscapeCsv(string value)
         {
             return (value ?? "").Replace("\"", "\"\"");
+        }
+
+        private string BuildScanStatsText()
+        {
+            return string.Format("Sạch: {0} | Nhiễm: {1} | Bỏ qua: {2} | Tổng: {3} | Thời gian: {4}",
+                cleanCount, infectedCount, skippedCount, totalCount, (DateTime.Now - startTime).ToString(@"hh\:mm\:ss"));
+        }
+
+        private int CountScanFiles(string path, CancellationToken token)
+        {
+            int count = 0;
+            foreach (string file in EnumerateScanFiles(path, token, false))
+            {
+                if (token.IsCancellationRequested) break;
+                count++;
+            }
+            return count;
+        }
+
+        private IEnumerable<string> EnumerateScanFiles(string path, CancellationToken token)
+        {
+            return EnumerateScanFiles(path, token, true);
+        }
+
+        private IEnumerable<string> EnumerateScanFiles(string path, CancellationToken token, bool countSkipped)
+        {
+            if (File.Exists(path))
+            {
+                if (!ShouldSkipScanPath(path)) yield return path;
+                yield break;
+            }
+
+            if (!Directory.Exists(path)) yield break;
+
+            Stack<string> pending = new Stack<string>();
+            pending.Push(path);
+
+            while (pending.Count > 0)
+            {
+                if (token.IsCancellationRequested) yield break;
+
+                string dir = pending.Pop();
+                if (ShouldSkipScanPath(dir)) continue;
+
+                string[] files = new string[0];
+                try { files = Directory.GetFiles(dir); }
+                catch { if (countSkipped) skippedCount++; }
+
+                foreach (string file in files)
+                {
+                    if (token.IsCancellationRequested) yield break;
+                    if (!ShouldSkipScanPath(file)) yield return file;
+                }
+
+                string[] dirs = new string[0];
+                try { dirs = Directory.GetDirectories(dir); }
+                catch { if (countSkipped) skippedCount++; }
+
+                foreach (string child in dirs)
+                {
+                    if (token.IsCancellationRequested) yield break;
+                    if (!ShouldSkipScanPath(child)) pending.Push(child);
+                    else if (countSkipped) skippedCount++;
+                }
+            }
+        }
+
+        private bool ShouldSkipScanPath(string path)
+        {
+            try
+            {
+                string name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (string.IsNullOrEmpty(name)) return false;
+
+                if (name.Equals("System Volume Information", StringComparison.OrdinalIgnoreCase)) return true;
+                if (name.Equals("$RECYCLE.BIN", StringComparison.OrdinalIgnoreCase)) return true;
+                if (name.Equals("Recovery", StringComparison.OrdinalIgnoreCase)) return true;
+                if (name.Equals("Boot", StringComparison.OrdinalIgnoreCase)) return true;
+                if (name.Equals("EFI", StringComparison.OrdinalIgnoreCase)) return true;
+                if (name.Equals(".vault", StringComparison.OrdinalIgnoreCase)) return true;
+                if (name.Equals(".vault_decoy", StringComparison.OrdinalIgnoreCase)) return true;
+                if (name.Equals("AutoLauncher", StringComparison.OrdinalIgnoreCase)) return true;
+
+                FileAttributes attr = File.GetAttributes(path);
+                if ((attr & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint) return true;
+                if ((attr & FileAttributes.System) == FileAttributes.System && Directory.Exists(path)) return true;
+            }
+            catch { return true; }
+
+            return false;
         }
 
         private bool QuarantineFile(string sourceFile, string virusName)
