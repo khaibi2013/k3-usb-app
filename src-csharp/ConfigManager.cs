@@ -80,6 +80,7 @@ namespace AnToanUSB
             }
 
             EnsureRuntimeStorage();
+            EnsurePortableMetadata();
         }
 
         public static bool IsHwidAllowed()
@@ -146,6 +147,27 @@ namespace AnToanUSB
             EnsureDirectory(Path.Combine(baseDir, ".vault_decoy"));
             EnsureDirectory(Path.Combine(baseDir, "BaoMat"));
             HideRuntimePath(Path.Combine(baseDir, ".vault_config.json"));
+        }
+
+        public static void EnsurePortableMetadata()
+        {
+            string autorunPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "autorun.inf");
+            if (!File.Exists(autorunPath))
+            {
+                string content =
+                    "[AutoRun]\r\n" +
+                    "label=USB An Toan K3\r\n" +
+                    "icon=AnToanUSB.exe\r\n" +
+                    "action=Mo USB An Toan K3\r\n" +
+                    "open=AnToanUSB.exe\r\n" +
+                    "shellexecute=AnToanUSB.exe\r\n" +
+                    "shell\\open=Mo USB An Toan K3\r\n" +
+                    "shell\\open\\command=AnToanUSB.exe\r\n" +
+                    "shell\\explore=Mo thu muc USB\r\n" +
+                    "shell\\explore\\command=explorer.exe .\r\n";
+                File.WriteAllText(autorunPath, content);
+            }
+            HideRuntimePath(autorunPath);
         }
 
         private static void EnsureDirectory(string path)

@@ -58,6 +58,25 @@ namespace AnToanUSB
             }
         }
 
+        public static bool CanWriteToCurrentAppDrive()
+        {
+            string root = Path.GetPathRoot(AppDomain.CurrentDomain.BaseDirectory);
+            if (string.IsNullOrEmpty(root)) return false;
+
+            string probe = Path.Combine(root, ".k3_write_probe_" + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                File.WriteAllText(probe, "K3 write probe " + DateTime.UtcNow.ToString("o"));
+                File.Delete(probe);
+                return true;
+            }
+            catch
+            {
+                try { if (File.Exists(probe)) File.Delete(probe); } catch { }
+                return false;
+            }
+        }
+
         public static bool IsAdministrator()
         {
             WindowsIdentity identity = WindowsIdentity.GetCurrent();

@@ -70,10 +70,12 @@ namespace AnToanUSB
                     bool next = !UsbHelper.IsReadOnlyEnabled();
                     UsbHelper.SetReadOnly(next);
                     btnReadOnlyLock.Text = next ? "Tắt chế độ Chỉ Đọc" : "Bật chế độ Chỉ Đọc";
-                    MessageBox.Show(next
-                        ? "Đã bật chế độ chặn ghi USB bằng Windows policy và DiskPart. Nếu Explorer vẫn ghi được, hãy rút/cắm lại USB."
-                        : "Đã tắt chế độ chặn ghi USB. Nếu Windows vẫn báo chỉ đọc, hãy rút/cắm lại USB.",
-                        "Security", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    bool canWrite = UsbHelper.CanWriteToCurrentAppDrive();
+                    bool verified = next ? !canWrite : canWrite;
+                    string message = next
+                        ? (canWrite ? "Đã bật chặn ghi nhưng Windows vẫn ghi thử được. Hãy rút/cắm lại USB." : "Đã bật chặn ghi và kiểm tra thực tế: USB không ghi được.")
+                        : (canWrite ? "Đã tắt chặn ghi và kiểm tra thực tế: USB đã ghi được." : "Đã tắt chặn ghi nhưng Windows vẫn chưa cho ghi. Hãy rút/cắm lại USB.");
+                    MessageBox.Show(message, "Security", MessageBoxButtons.OK, verified ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
                 }
                 catch (Exception ex)
                 {

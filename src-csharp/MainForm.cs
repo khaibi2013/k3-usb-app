@@ -192,7 +192,7 @@ namespace AnToanUSB
                     }
                     
                     string dest = GetUniqueVaultEncryptedPath(filePath);
-                    CryptoEngine.EncryptFile(filePath, dest);
+                    EncryptAndVerifyFile(filePath, dest);
                     CryptoEngine.SecureShredFile(filePath);
                     
                     this.Invoke(new Action(() => LoadRightPane()));
@@ -897,7 +897,7 @@ namespace AnToanUSB
                             if (!File.Exists(p)) continue;
                             if (p.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase)) continue;
                             string dest = GetAvailablePath(p + ".k3enc");
-                            CryptoEngine.EncryptFile(p, dest);
+                            EncryptAndVerifyFile(p, dest);
                             CryptoEngine.SecureShredFile(p);
                             count++;
                         }
@@ -1091,7 +1091,7 @@ namespace AnToanUSB
                             string p = selected.Tag != null ? selected.Tag.ToString() : "";
                             if (!File.Exists(p) || p.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase)) continue;
                             string dest = GetAvailablePath(p + ".k3enc");
-                            CryptoEngine.EncryptFile(p, dest);
+                            EncryptAndVerifyFile(p, dest);
                             CryptoEngine.SecureShredFile(p);
                             count++;
                         }
@@ -1319,10 +1319,16 @@ namespace AnToanUSB
                 UsbHelper.SetReadOnly(next);
                 btnReadOnlyToggle.Text = next ? "Mở ghi" : "Chặn ghi";
                 btnReadOnlyToggle.Image = CustomIcons.GetLockToggleIcon(next);
-                MessageBox.Show(next
-                    ? "Đã bật chặn ghi USB bằng Windows policy và DiskPart. Nếu Explorer vẫn hiển thị ghi được, hãy rút/cắm lại USB để Windows nạp lại trạng thái."
-                    : "Đã tắt chặn ghi USB. Nếu Windows vẫn báo chỉ đọc, hãy rút/cắm lại USB để áp dụng đầy đủ.",
-                    "Chặn ghi USB", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                bool canWrite = UsbHelper.CanWriteToCurrentAppDrive();
+                string message = next
+                    ? (canWrite
+                        ? "Đã bật chặn ghi bằng Windows policy và DiskPart, nhưng Windows vẫn cho ghi thử. Hãy rút/cắm lại USB để trạng thái readonly có hiệu lực."
+                        : "Đã bật chặn ghi USB và kiểm tra thực tế: không ghi được file mới vào USB.")
+                    : (canWrite
+                        ? "Đã tắt chặn ghi USB và kiểm tra thực tế: USB đã ghi được."
+                        : "Đã tắt chặn ghi nhưng Windows vẫn chưa cho ghi. Hãy rút/cắm lại USB để cập nhật trạng thái.");
+                bool verified = next ? !canWrite : canWrite;
+                MessageBox.Show(message, "Chặn ghi USB", MessageBoxButtons.OK, verified ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {
@@ -1476,7 +1482,7 @@ namespace AnToanUSB
                     if (source.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase) && IsInsidePath(source, vaultPath)) continue;
                     if (!IsFileCleanForUsbImport(source, true)) continue;
                     string dest = GetAvailablePath(Path.Combine(targetVaultDir, Path.GetFileName(source) + ".k3enc"));
-                    CryptoEngine.EncryptFile(source, dest);
+                    EncryptAndVerifyFile(source, dest);
                     if (removeSource) CryptoEngine.SecureShredFile(source);
                     count++;
                 }
@@ -1501,7 +1507,7 @@ namespace AnToanUSB
                         string destDir = Path.Combine(folderRoot, Path.GetDirectoryName(rel) ?? "");
                         Directory.CreateDirectory(destDir);
                         string dest = GetAvailablePath(Path.Combine(destDir, Path.GetFileName(file) + ".k3enc"));
-                        CryptoEngine.EncryptFile(file, dest);
+                        EncryptAndVerifyFile(file, dest);
                         count++;
                     }
                     if (removeSource && allFilesAccepted) SecureDeletePath(source);
@@ -1754,7 +1760,7 @@ namespace AnToanUSB
                     {
                         File.WriteAllText(tempFile, editor.EditedText, new UTF8Encoding(true));
                         string dest = GetAvailablePath(Path.Combine(baseDir, Path.GetFileName(name) + ".k3enc"));
-                        CryptoEngine.EncryptFile(tempFile, tempEnc);
+                        EncryptAndVerifyFile(tempFile, tempEnc);
                         File.Copy(tempEnc, dest, false);
                     }
                     finally
@@ -1824,7 +1830,7 @@ namespace AnToanUSB
                     if (encrypted)
                     {
                         string tempEnc = editFile + ".k3enc";
-                        CryptoEngine.EncryptFile(editFile, tempEnc);
+                        EncryptAndVerifyFile(editFile, tempEnc);
                         File.Copy(tempEnc, path, true);
                     }
                 }
@@ -1847,6 +1853,31 @@ namespace AnToanUSB
             string ext = Path.GetExtension(fileName).ToLowerInvariant();
             return ext == ".txt" || ext == ".md" || ext == ".log" || ext == ".ini" || ext == ".json" ||
                    ext == ".xml" || ext == ".csv" || ext == ".yml" || ext == ".yaml" || ext == ".config";
+        }
+
+        private void EncryptAndVerifyFile(string sourceFile, string destFile)
+        {
+            CryptoEngine.EncryptFile(sourceFile, destFile);
+            CryptoEngine.VerifyEncryptedFile(destFile);
+        }
+
+        private void EncryptWithPasswordAndVerifyFile(string sourceFile, string destFile, string password)
+        {
+            CryptoEngine.EncryptFileWithPassword(sourceFile, destFile, password);
+
+            string verifyDir = CreateTempEditorDir();
+            try
+            {
+                CryptoEngine.DecryptFileWithPassword(destFile, verifyDir, password);
+                string expectedName = Path.GetFileName(sourceFile);
+                string restored = Path.Combine(verifyDir, expectedName);
+                if (!File.Exists(restored))
+                    throw new IOException("Không xác minh được file sau mã hóa.");
+            }
+            finally
+            {
+                DeleteTempEditorDir(verifyDir);
+            }
         }
 
         private string CreateTempEditorDir()
@@ -1893,7 +1924,7 @@ namespace AnToanUSB
                 }
 
                 string dest = GetAvailablePath(path + ".k3enc");
-                CryptoEngine.EncryptFileWithPassword(path, dest, password);
+                EncryptWithPasswordAndVerifyFile(path, dest, password);
                 CryptoEngine.SecureShredFile(path);
                 count++;
             }
