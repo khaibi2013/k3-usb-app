@@ -1,0 +1,10 @@
+[AutoRun]
+label=USB An Toan K3
+icon=AnToanUSB.exe
+action=Mo USB An Toan K3
+open=AnToanUSB.exe
+shellexecute=AnToanUSB.exe
+shell\open=Mo USB An Toan K3
+shell\open\command=AnToanUSB.exe
+shell\explore=Mo thu muc USB
+shell\explore\command=explorer.exe .
