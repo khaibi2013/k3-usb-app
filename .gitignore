@@ -26,3 +26,14 @@ release/
 out/
 build/
 dist-electron/
+
+# K3 USB runtime data
+src-csharp/AnToanUSB.exe
+src-csharp/.vault/
+src-csharp/.vault_decoy/
+src-csharp/BaoMat/
+src-csharp/.vault_config.json
+src-csharp/.k3_trusted_hashes.txt
+K3-AV-Test/
+BaoMat/
+eicar_test_virus.txt
