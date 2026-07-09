@@ -21,11 +21,27 @@ New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 try {
     if ($Version -eq "latest") {
         $release = Invoke-RestMethod -Uri "https://api.github.com/repos/Cisco-Talos/clamav/releases/latest" -Headers @{ "User-Agent" = "K3-USB-App" }
-        $asset = $release.assets | Where-Object { $_.name -match "win-x64.*\.zip$" -or $_.name -match "win64.*\.zip$" } | Select-Object -First 1
-        if (-not $asset) {
-            $asset = $release.assets | Where-Object { $_.name -match "windows.*\.zip$" -or $_.name -match "\.zip$" } | Select-Object -First 1
+        $machineArch = $env:PROCESSOR_ARCHITEW6432
+        if ([string]::IsNullOrWhiteSpace($machineArch)) { $machineArch = $env:PROCESSOR_ARCHITECTURE }
+
+        if ($machineArch -match "ARM64") {
+            $asset = $release.assets | Where-Object {
+                $_.name -match "\.zip$" -and $_.name -match "win" -and ($_.name -match "arm64" -or $_.name -match "aarch64")
+            } | Select-Object -First 1
+        } else {
+            $asset = $release.assets | Where-Object {
+                $_.name -match "\.zip$" -and
+                $_.name -match "win" -and
+                $_.name -notmatch "arm64" -and
+                $_.name -notmatch "aarch64" -and
+                ($_.name -match "x64" -or $_.name -match "amd64" -or $_.name -match "win64")
+            } | Select-Object -First 1
         }
-        if (-not $asset) { throw "Khong tim thay file ZIP Windows trong release moi nhat cua ClamAV." }
+
+        if (-not $asset) {
+            $names = ($release.assets | Where-Object { $_.name -match "\.zip$" } | Select-Object -ExpandProperty name) -join ", "
+            throw "Khong tim thay file ZIP Windows phu hop voi may nay ($machineArch). Cac goi ZIP hien co: $names"
+        }
         $url = $asset.browser_download_url
     } else {
         $url = $Version
@@ -41,6 +57,8 @@ try {
     if (-not $clamscan) { throw "Khong tim thay clamscan.exe trong goi vua tai." }
 
     $sourceDir = $clamscan.Directory.FullName
+    Get-ChildItem -LiteralPath $clamRoot -Force | Where-Object { $_.Name -ne "database" } | Remove-Item -Recurse -Force
+    New-Item -ItemType Directory -Force -Path (Join-Path $clamRoot "database") | Out-Null
     Copy-Item -Path (Join-Path $sourceDir "*") -Destination $clamRoot -Recurse -Force
 
     $conf = @"
