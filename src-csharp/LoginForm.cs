@@ -1,5 +1,7 @@
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace AnToanUSB
@@ -12,6 +14,8 @@ namespace AnToanUSB
         private Label lblHelp;
         private Label lblPassword;
         private Label lblStatus;
+        private Panel pnlConnectionDot;
+        private bool isConnected;
         private PictureBox picShield;
 
         public LoginForm()
@@ -72,6 +76,8 @@ namespace AnToanUSB
             btnLogin = new Button { Text = "Đăng nhập", Location = new Point(78, 216), Width = 284, Height = 42, BackColor = Theme.Teal, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = Theme.FontHeading };
             btnLogin.FlatAppearance.BorderSize = 0;
             btnLogin.Click += (s, e) => PerformLogin();
+            pnlConnectionDot = new Panel { Size = new Size(14, 14), Location = new Point(this.ClientSize.Width - 26, this.ClientSize.Height - 24), Anchor = AnchorStyles.Right | AnchorStyles.Bottom, Cursor = Cursors.Hand };
+            pnlConnectionDot.Paint += DrawConnectionDot;
 
             lblStatus = new Label { Text = "Đang giải mã thiết lập/1...", Location = new Point(24, 270), AutoSize = true, ForeColor = Theme.TextMute, Font = Theme.FontSmall };
 
@@ -82,6 +88,45 @@ namespace AnToanUSB
             this.Controls.Add(txtPassword);
             this.Controls.Add(btnLogin);
             this.Controls.Add(lblStatus);
+            this.Controls.Add(pnlConnectionDot);
+            SetConnectionStatus(false);
+        }
+
+        private void DrawConnectionDot(object sender, PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.Clear(this.BackColor);
+
+            Color fill = isConnected ? Theme.Teal : Color.FromArgb(239, 112, 125);
+            Color border = isConnected ? Theme.TealDark : Color.FromArgb(213, 63, 78);
+            Rectangle rect = new Rectangle(2, 2, pnlConnectionDot.Width - 5, pnlConnectionDot.Height - 5);
+
+            using (SolidBrush glow = new SolidBrush(Color.FromArgb(45, fill)))
+            using (SolidBrush brush = new SolidBrush(fill))
+            using (Pen pen = new Pen(border, 1.2f))
+            {
+                e.Graphics.FillEllipse(glow, 0, 0, pnlConnectionDot.Width - 1, pnlConnectionDot.Height - 1);
+                e.Graphics.FillEllipse(brush, rect);
+                e.Graphics.DrawEllipse(pen, rect);
+            }
+        }
+
+        private void SetConnectionStatus(bool connected)
+        {
+            isConnected = connected;
+            if (lblStatus != null)
+                lblStatus.Text = connected ? "Đã kết nối an toàn." : LanguageManager.GetString("LoginStatus");
+            if (pnlConnectionDot != null)
+                pnlConnectionDot.Invalidate();
+        }
+
+        private void CompleteSuccessfulLogin()
+        {
+            SetConnectionStatus(true);
+            Application.DoEvents();
+            Thread.Sleep(180);
+            this.DialogResult = DialogResult.OK;
+            this.Close();
         }
 
         private void ApplyLanguage()
@@ -91,7 +136,7 @@ namespace AnToanUSB
             lblHelp.Text = string.IsNullOrEmpty(ConfigManager.LoginHelpText) ? LanguageManager.GetString("LoginHelp") : ConfigManager.LoginHelpText;
             lblHelp.Visible = !ConfigManager.HideLoginHelp;
             btnLogin.Text = LanguageManager.GetString("LoginBtn");
-            lblStatus.Text = LanguageManager.GetString("LoginStatus");
+            SetConnectionStatus(isConnected);
         }
 
         private int failedAttempts = 0;
@@ -109,8 +154,7 @@ namespace AnToanUSB
                     if (ShowInitialSetup())
                     {
                         CryptoEngine.Authenticate(txtPassword.Text);
-                        this.DialogResult = DialogResult.OK;
-                        this.Close();
+                        CompleteSuccessfulLogin();
                     }
                     return;
                 }
@@ -124,11 +168,11 @@ namespace AnToanUSB
                 if (ConfigManager.VerifyPassword(pwd))
                 {
                     CryptoEngine.Authenticate(pwd);
-                    this.DialogResult = DialogResult.OK;
-                    this.Close();
+                    CompleteSuccessfulLogin();
                 }
                 else
                 {
+                    SetConnectionStatus(false);
                     failedAttempts++;
                     if (failedAttempts >= 20)
                     {
