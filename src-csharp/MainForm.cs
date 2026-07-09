@@ -53,6 +53,8 @@ namespace AnToanUSB
         private List<string> clipboardPaths = new List<string>();
         private bool clipboardIsCut = false;
         private DateTime lastDevicePrompt = DateTime.MinValue;
+        private System.Windows.Forms.Timer appDriveMonitorTimer;
+        private bool isAutoExitingForRemovedDrive = false;
 
         private ImageList sysIconsSmall;
         private ImageList sysIconsLarge;
@@ -81,6 +83,7 @@ namespace AnToanUSB
             showHiddenFiles = ConfigManager.ShowHidden;
 
             SetupAutoEncrypt();
+            StartAppDriveMonitor();
             Shown += (s, e) => BeginInvoke(new Action(LoadInitialDataFast));
         }
 
@@ -2251,23 +2254,56 @@ namespace AnToanUSB
             }
         }
 
-        private void AutoExitIfAppDriveRemoved()
+        private void StartAppDriveMonitor()
         {
             try
             {
+                appDriveMonitorTimer = new System.Windows.Forms.Timer { Interval = 2000 };
+                appDriveMonitorTimer.Tick += (s, e) => AutoExitIfAppDriveRemoved();
+                appDriveMonitorTimer.Start();
+            }
+            catch { }
+        }
+
+        private void AutoExitIfAppDriveRemoved()
+        {
+            if (isAutoExitingForRemovedDrive) return;
+            try
+            {
                 string root = Path.GetPathRoot(AppDomain.CurrentDomain.BaseDirectory);
-                if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+                if (!IsAppDriveStillAvailable(root))
                 {
-                    CryptoEngine.Logout();
-                    if (watcher != null) watcher.EnableRaisingEvents = false;
-                    Application.Exit();
+                    ExitAfterAppDriveRemoved();
                 }
             }
             catch
             {
-                try { CryptoEngine.Logout(); } catch { }
-                Application.Exit();
+                ExitAfterAppDriveRemoved();
             }
+        }
+
+        private bool IsAppDriveStillAvailable(string root)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(root)) return false;
+                if (!Directory.Exists(root)) return false;
+                DriveInfo drive = new DriveInfo(root);
+                return drive.IsReady;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void ExitAfterAppDriveRemoved()
+        {
+            isAutoExitingForRemovedDrive = true;
+            try { if (appDriveMonitorTimer != null) appDriveMonitorTimer.Stop(); } catch { }
+            try { CryptoEngine.Logout(); } catch { }
+            try { if (watcher != null) watcher.EnableRaisingEvents = false; } catch { }
+            Application.Exit();
         }
 
         private void CopyDirectory(string sourceDir, string targetDir)
