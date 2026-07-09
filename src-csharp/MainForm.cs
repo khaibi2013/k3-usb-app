@@ -1326,8 +1326,8 @@ namespace AnToanUSB
                 btnReadOnlyToggle.Text = next ? "Mở ghi" : "Chặn ghi";
                 btnReadOnlyToggle.Image = CustomIcons.GetLockToggleIcon(next);
                 MessageBox.Show(next
-                    ? "Đã bật chặn ghi USB. Có thể cần rút/cắm lại USB để Windows áp dụng đầy đủ."
-                    : "Đã tắt chặn ghi USB. Có thể cần rút/cắm lại USB để Windows áp dụng đầy đủ.",
+                    ? "Đã bật chặn ghi USB bằng Windows policy và DiskPart. Nếu Explorer vẫn hiển thị ghi được, hãy rút/cắm lại USB để Windows nạp lại trạng thái."
+                    : "Đã tắt chặn ghi USB. Nếu Windows vẫn báo chỉ đọc, hãy rút/cắm lại USB để áp dụng đầy đủ.",
                     "Chặn ghi USB", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
