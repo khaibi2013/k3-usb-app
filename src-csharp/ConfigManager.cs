@@ -135,6 +135,7 @@ namespace AnToanUSB
                 AutoDecrypt ? "true" : "false", ShowHidden ? "true" : "false", WipeHistory ? "true" : "false", WipeMacOs ? "true" : "false",
                 EscapeJson(LoginTitle), EscapeJson(LoginHelpText), HideLoginHelp ? "true" : "false");
             File.WriteAllText(configPath, json);
+            HideRuntimePath(configPath);
             EnsureRuntimeStorage();
         }
 
@@ -144,11 +145,25 @@ namespace AnToanUSB
             EnsureDirectory(Path.Combine(baseDir, ".vault"));
             EnsureDirectory(Path.Combine(baseDir, ".vault_decoy"));
             EnsureDirectory(Path.Combine(baseDir, "BaoMat"));
+            HideRuntimePath(Path.Combine(baseDir, ".vault_config.json"));
         }
 
         private static void EnsureDirectory(string path)
         {
             if (!Directory.Exists(path)) Directory.CreateDirectory(path);
+            HideRuntimePath(path);
+        }
+
+        private static void HideRuntimePath(string path)
+        {
+            try
+            {
+                if (!File.Exists(path) && !Directory.Exists(path)) return;
+                FileAttributes attributes = File.GetAttributes(path);
+                attributes |= FileAttributes.Hidden | FileAttributes.System;
+                File.SetAttributes(path, attributes);
+            }
+            catch { }
         }
 
         public static byte[] GetCryptoSaltBytes()
