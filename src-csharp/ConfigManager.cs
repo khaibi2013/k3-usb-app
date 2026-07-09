@@ -135,6 +135,7 @@ namespace AnToanUSB
                 EscapeJson(HwidLock), EscapeJson(RealPasswordHash), EscapeJson(DecoyPasswordHash), EscapeJson(CryptoSalt), EscapeJson(AutoEncryptFolder), MaxFileSizeBytes.ToString(), 
                 AutoDecrypt ? "true" : "false", ShowHidden ? "true" : "false", WipeHistory ? "true" : "false", WipeMacOs ? "true" : "false",
                 EscapeJson(LoginTitle), EscapeJson(LoginHelpText), HideLoginHelp ? "true" : "false");
+            PrepareManagedFileForWrite(configPath);
             File.WriteAllText(configPath, json);
             HideRuntimePath(configPath);
             EnsureRuntimeStorage();
@@ -187,6 +188,25 @@ namespace AnToanUSB
 
             foreach (string path in paths)
                 HideRuntimePath(path);
+        }
+
+        public static void PrepareManagedFileForWrite(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) return;
+                FileAttributes attributes = File.GetAttributes(path);
+                attributes &= ~FileAttributes.Hidden;
+                attributes &= ~FileAttributes.System;
+                attributes &= ~FileAttributes.ReadOnly;
+                File.SetAttributes(path, attributes);
+            }
+            catch { }
+        }
+
+        public static void HideManagedPath(string path)
+        {
+            HideRuntimePath(path);
         }
 
         private static void EnsureDirectory(string path)

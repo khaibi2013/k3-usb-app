@@ -105,8 +105,10 @@ namespace AnToanUSB
         {
             try
             {
+                ConfigManager.PrepareManagedFileForWrite(TrustFilePath);
                 File.WriteAllLines(TrustFilePath, trustedEntries.Select(e =>
                     e.Hash + "|" + Escape(e.Name) + "|" + Escape(e.AddedAt)));
+                ConfigManager.HideManagedPath(TrustFilePath);
             }
             catch { }
         }
