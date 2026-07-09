@@ -29,6 +29,7 @@ dist-electron/
 
 # K3 USB runtime data
 src-csharp/AnToanUSB.exe
+src-csharp/K3AutoLauncher.exe
 src-csharp/.vault/
 src-csharp/.vault_decoy/
 src-csharp/BaoMat/
