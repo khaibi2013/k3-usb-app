@@ -109,11 +109,7 @@ namespace AnToanUSB
 
         public static string GetEngineInfo()
         {
-            string clamPath = FindClamScanPath();
-            string clamInfo = string.IsNullOrEmpty(clamPath)
-                ? "ClamAV offline: chưa tìm thấy"
-                : "ClamAV offline: " + clamPath;
-            return "K3 heuristic + " + UsbYaraRuleScanner.GetEngineInfo() + " + " + clamInfo + ". Windows Defender: bỏ qua.";
+            return "K3 heuristic + " + UsbYaraRuleScanner.GetEngineInfo() + " + " + ClamAvManager.GetStatusText() + ". Windows Defender: bỏ qua.";
         }
 
         private static ScanResult Infected(string filePath, string virusName)
@@ -144,13 +140,13 @@ namespace AnToanUSB
         {
             try
             {
-                string clamPath = FindClamScanPath();
+                string clamPath = ClamAvManager.FindClamScanPath();
                 if (string.IsNullOrEmpty(clamPath)) return "";
 
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     FileName = clamPath,
-                    Arguments = string.Format("--no-summary --infected \"{0}\"", filePath),
+                    Arguments = ClamAvManager.BuildClamScanArguments(filePath),
                     WindowStyle = ProcessWindowStyle.Hidden,
                     CreateNoWindow = true,
                     UseShellExecute = false,
@@ -188,33 +184,6 @@ namespace AnToanUSB
                 if (!string.IsNullOrEmpty(name)) return "ClamAV." + name;
             }
             return "ClamAV.Detected";
-        }
-
-        private static string FindClamScanPath()
-        {
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string[] candidates = {
-                Path.Combine(baseDir, @"tools\clamav\clamscan.exe"),
-                Path.Combine(baseDir, @"clamav\clamscan.exe"),
-                @"C:\Program Files\ClamAV\clamscan.exe",
-                @"C:\Program Files (x86)\ClamAV\clamscan.exe"
-            };
-
-            foreach (string candidate in candidates)
-                if (File.Exists(candidate)) return candidate;
-
-            string pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
-            foreach (string dir in pathEnv.Split(Path.PathSeparator))
-            {
-                try
-                {
-                    if (string.IsNullOrWhiteSpace(dir)) continue;
-                    string candidate = Path.Combine(dir.Trim(), "clamscan.exe");
-                    if (File.Exists(candidate)) return candidate;
-                }
-                catch { }
-            }
-            return "";
         }
 
         private static bool LooksLikeFolderIconExecutable(string filePath)

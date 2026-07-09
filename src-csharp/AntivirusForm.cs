@@ -133,8 +133,15 @@ namespace AnToanUSB
                 if (!Directory.Exists(RecoverySnapshotManager.SnapshotRoot)) Directory.CreateDirectory(RecoverySnapshotManager.SnapshotRoot);
                 Process.Start(new ProcessStartInfo { FileName = RecoverySnapshotManager.SnapshotRoot, UseShellExecute = true });
             };
+            Button btnUpdateClam = new Button { Text = "Cập nhật ClamAV", Location = new Point(368, 250), Width = 150, Height = 35, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(16, 124, 16), ForeColor = Color.White, Font = btnFont };
+            btnUpdateClam.Click += async (s, e) => await UpdateClamAvDatabaseAsync(btnUpdateClam);
+            Button btnOpenClam = new Button { Text = "Mở thư mục ClamAV", Location = new Point(532, 250), Width = 160, Height = 35, FlatStyle = FlatStyle.Flat, BackColor = Color.White, Font = btnFont };
+            btnOpenClam.Click += (s, e) => {
+                ClamAvManager.EnsurePortableLayout();
+                Process.Start(new ProcessStartInfo { FileName = ClamAvManager.ClamRoot, UseShellExecute = true });
+            };
             lblInfoQuarantine = new Label { Text = "", Location = new Point(20, 300), Width = 1000, Height = 80, Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.FromArgb(16, 124, 16) };
-            tabInfo.Controls.AddRange(new Control[] { lblInfoEngine, btnRefreshInfo, btnOpenSnapshots, lblInfoQuarantine });
+            tabInfo.Controls.AddRange(new Control[] { lblInfoEngine, btnRefreshInfo, btnOpenSnapshots, btnUpdateClam, btnOpenClam, lblInfoQuarantine });
 
             lvLog = new ListView { Location = new Point(10, 15), Width = 1040, Height = 395, View = View.Details, FullRowSelect = true, GridLines = true, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
             lvLog.Columns.Add("Thời gian", 150);
@@ -401,6 +408,31 @@ namespace AnToanUSB
             {
                 int qCount = Directory.Exists(QuarantineDir) ? Directory.GetFiles(QuarantineDir, "*.k3q").Length : 0;
                 lblInfoQuarantine.Text = string.Format("Khu cách ly hiện có {0} tệp. Lần quét gần nhất: Sạch={1}, Nhiễm={2}, Bỏ qua={3}, Tổng={4}.", qCount, cleanCount, infectedCount, skippedCount, totalCount);
+            }
+        }
+
+        private async Task UpdateClamAvDatabaseAsync(Button button)
+        {
+            button.Enabled = false;
+            string oldText = button.Text;
+            button.Text = "Đang cập nhật...";
+            AddLog("INFO", "Bắt đầu cập nhật database ClamAV.");
+            try
+            {
+                ClamAvUpdateResult result = await Task.Run(() => ClamAvManager.UpdateDatabase(180000));
+                AddLog(result.Success ? "INFO" : "ERROR", result.Message);
+                if (!string.IsNullOrWhiteSpace(result.Output))
+                {
+                    string output = result.Output.Length > 1200 ? result.Output.Substring(0, 1200) + "..." : result.Output;
+                    AddLog(result.Success ? "INFO" : "ERROR", output);
+                }
+                RefreshAntivirusInfo();
+                MessageBox.Show(result.Message, "Cập nhật ClamAV", MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                button.Text = oldText;
+                button.Enabled = true;
             }
         }
 
