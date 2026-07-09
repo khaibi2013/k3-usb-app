@@ -713,13 +713,7 @@ namespace AnToanUSB
             btnReadOnlyToggle.Click += (s, e) => ToggleReadOnly();
 
             btnShield = MakeToolbarButton("Khóa USB", CustomIcons.GetUsbLockIcon(), "Ngắt kết nối an toàn");
-            btnShield.Click += (s, e) => {
-                CryptoEngine.Logout();
-                if (watcher != null) watcher.EnableRaisingEvents = false;
-                if (ConfigManager.WipeHistory) CleanupRecentHistory();
-                MessageBox.Show("Đã đóng và khóa Két sắt thành công. Bạn có thể rút USB ra an toàn!", "Ngắt kết nối", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                Application.Exit();
-            };
+            btnShield.Click += (s, e) => LockAndEjectUsb();
 
             btnDatabase = MakeToolbarButton("Dọn dẹp", CustomIcons.GetCleanupIcon(), "Dọn dẹp & Quản lý lịch sử");
             btnDatabase.Click += (s, e) => new PrivacyCleanupForm().ShowDialog(this);
@@ -2169,6 +2163,82 @@ namespace AnToanUSB
             MessageBox.Show(output.Length > 1800 ? output.Substring(0, 1800) + "..." : output, title, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
+        private void LockAndEjectUsb()
+        {
+            string root = "";
+            try { root = Path.GetPathRoot(AppDomain.CurrentDomain.BaseDirectory); } catch { }
+
+            try
+            {
+                CryptoEngine.Logout();
+                if (watcher != null) watcher.EnableRaisingEvents = false;
+                if (ConfigManager.WipeHistory) CleanupRecentHistory();
+                if (IsEjectableAppDrive(root)) StartUsbEjectHelper(root);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Đã khóa két nhưng không thể gọi eject USB: " + ex.Message, "Khóa USB", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                Application.Exit();
+            }
+        }
+
+        private void StartUsbEjectHelper(string driveRoot)
+        {
+            string escapedDrive = driveRoot.Replace("'", "''");
+            string command = "Start-Sleep -Milliseconds 1200; " +
+                "$drive='" + escapedDrive + "'; " +
+                "$item=(New-Object -ComObject Shell.Application).Namespace(17).ParseName($drive); " +
+                "if ($item -ne $null) { $item.InvokeVerb('Eject') }";
+
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"" + command.Replace("\"", "\\\"") + "\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            Process.Start(psi);
+        }
+
+        private bool IsEjectableAppDrive(string driveRoot)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(driveRoot)) return false;
+                string systemRoot = Path.GetPathRoot(Environment.SystemDirectory);
+                if (string.Equals(driveRoot, systemRoot, StringComparison.OrdinalIgnoreCase)) return false;
+
+                DriveInfo drive = new DriveInfo(driveRoot);
+                return drive.DriveType == DriveType.Removable;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void AutoExitIfAppDriveRemoved()
+        {
+            try
+            {
+                string root = Path.GetPathRoot(AppDomain.CurrentDomain.BaseDirectory);
+                if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+                {
+                    CryptoEngine.Logout();
+                    if (watcher != null) watcher.EnableRaisingEvents = false;
+                    Application.Exit();
+                }
+            }
+            catch
+            {
+                try { CryptoEngine.Logout(); } catch { }
+                Application.Exit();
+            }
+        }
+
         private void CopyDirectory(string sourceDir, string targetDir)
         {
             Directory.CreateDirectory(targetDir);
@@ -2369,6 +2439,7 @@ namespace AnToanUSB
         {
             const int WM_DEVICECHANGE = 0x0219;
             const int DBT_DEVICEARRIVAL = 0x8000;
+            const int DBT_DEVICEREMOVECOMPLETE = 0x8004;
             if (m.Msg == WM_DEVICECHANGE && m.WParam.ToInt32() == DBT_DEVICEARRIVAL)
             {
                 if ((DateTime.Now - lastDevicePrompt).TotalSeconds > 8)
@@ -2376,6 +2447,10 @@ namespace AnToanUSB
                     lastDevicePrompt = DateTime.Now;
                     BeginInvoke(new Action(() => PromptScanNewUsb()));
                 }
+            }
+            else if (m.Msg == WM_DEVICECHANGE && m.WParam.ToInt32() == DBT_DEVICEREMOVECOMPLETE)
+            {
+                BeginInvoke(new Action(() => AutoExitIfAppDriveRemoved()));
             }
             base.WndProc(ref m);
         }
