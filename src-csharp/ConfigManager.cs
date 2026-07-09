@@ -151,7 +151,8 @@ namespace AnToanUSB
 
         public static void EnsurePortableMetadata()
         {
-            string autorunPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "autorun.inf");
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string autorunPath = Path.Combine(baseDir, "autorun.inf");
             if (!File.Exists(autorunPath))
             {
                 string content =
@@ -168,6 +169,24 @@ namespace AnToanUSB
                 File.WriteAllText(autorunPath, content);
             }
             HideRuntimePath(autorunPath);
+            HidePortableSupportFiles();
+        }
+
+        public static void HidePortableSupportFiles()
+        {
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string[] paths = {
+                Path.Combine(baseDir, "autorun.inf"),
+                Path.Combine(baseDir, "icon.png"),
+                Path.Combine(baseDir, ".k3_trusted_hashes.txt"),
+                Path.Combine(baseDir, "AutoLauncher"),
+                Path.Combine(baseDir, "tools"),
+                Path.Combine(baseDir, "clamav"),
+                Path.Combine(baseDir, "public")
+            };
+
+            foreach (string path in paths)
+                HideRuntimePath(path);
         }
 
         private static void EnsureDirectory(string path)

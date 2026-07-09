@@ -174,6 +174,7 @@ namespace AnToanUSB
             if (!Directory.Exists(ClamRoot)) Directory.CreateDirectory(ClamRoot);
             if (!Directory.Exists(DatabaseDir)) Directory.CreateDirectory(DatabaseDir);
             if (!File.Exists(FreshClamConfigPath)) WriteFreshClamConfig();
+            ConfigManager.HidePortableSupportFiles();
         }
 
         private static void WriteFreshClamConfig()
