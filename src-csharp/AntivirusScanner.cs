@@ -51,11 +51,15 @@ namespace AnToanUSB
 
         public static ScanResult ScanFileReal(string filePath)
         {
-            if (!IsSafeFile(filePath))
-                return Infected(filePath, "Suspicious.Extension.Gen");
-
             try
             {
+                string yaraThreat = UsbYaraRuleScanner.ScanFile(filePath);
+                if (!string.IsNullOrEmpty(yaraThreat))
+                    return Infected(filePath, yaraThreat);
+
+                if (!IsSafeFile(filePath))
+                    return Infected(filePath, "Suspicious.Extension.Gen");
+
                 using (var sha256 = SHA256.Create())
                 using (var md5 = MD5.Create())
                 using (var stream = File.OpenRead(filePath))
@@ -86,7 +90,6 @@ namespace AnToanUSB
                     }
                 }
 
-                // Third-party scanner hook. Windows Defender is intentionally skipped.
                 string clamThreat = ScanWithClamAv(filePath);
                 if (!string.IsNullOrEmpty(clamThreat))
                     return Infected(filePath, clamThreat);
@@ -101,15 +104,16 @@ namespace AnToanUSB
 
         public static bool IsEngineAvailable()
         {
-            return !string.IsNullOrEmpty(FindClamScanPath());
+            return true;
         }
 
         public static string GetEngineInfo()
         {
             string clamPath = FindClamScanPath();
-            return string.IsNullOrEmpty(clamPath)
-                ? "K3-AV Offline + Heuristic. Windows Defender: bỏ qua. Engine bên thứ 3: chưa tìm thấy."
-                : "K3-AV Offline + Heuristic + ClamAV: " + clamPath + ". Windows Defender: bỏ qua.";
+            string clamInfo = string.IsNullOrEmpty(clamPath)
+                ? "ClamAV offline: chưa tìm thấy"
+                : "ClamAV offline: " + clamPath;
+            return "K3 heuristic + " + UsbYaraRuleScanner.GetEngineInfo() + " + " + clamInfo + ". Windows Defender: bỏ qua.";
         }
 
         private static ScanResult Infected(string filePath, string virusName)
