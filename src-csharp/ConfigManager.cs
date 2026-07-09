@@ -78,6 +78,8 @@ namespace AnToanUSB
                 LoginHelpText = "Trợ giúp HELP!";
                 HideLoginHelp = false;
             }
+
+            EnsureRuntimeStorage();
         }
 
         public static bool IsHwidAllowed()
@@ -120,6 +122,7 @@ namespace AnToanUSB
             DecoyPasswordHash = string.IsNullOrEmpty(decoyPass) ? "" : HashPassword(decoyPass);
             NeedsInitialSetup = false;
             SaveAllConfig();
+            EnsureRuntimeStorage();
         }
 
         public static void SaveAllConfig()
@@ -132,6 +135,20 @@ namespace AnToanUSB
                 AutoDecrypt ? "true" : "false", ShowHidden ? "true" : "false", WipeHistory ? "true" : "false", WipeMacOs ? "true" : "false",
                 EscapeJson(LoginTitle), EscapeJson(LoginHelpText), HideLoginHelp ? "true" : "false");
             File.WriteAllText(configPath, json);
+            EnsureRuntimeStorage();
+        }
+
+        public static void EnsureRuntimeStorage()
+        {
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            EnsureDirectory(Path.Combine(baseDir, ".vault"));
+            EnsureDirectory(Path.Combine(baseDir, ".vault_decoy"));
+            EnsureDirectory(Path.Combine(baseDir, "BaoMat"));
+        }
+
+        private static void EnsureDirectory(string path)
+        {
+            if (!Directory.Exists(path)) Directory.CreateDirectory(path);
         }
 
         public static byte[] GetCryptoSaltBytes()
