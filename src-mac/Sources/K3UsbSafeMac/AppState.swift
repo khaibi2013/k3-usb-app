@@ -18,6 +18,8 @@ final class AppState: ObservableObject {
     @Published var localItems: [LocalFileItem] = []
     @Published var antivirusEngineInfo = K3MacScanner.engineInfo()
     @Published var autoEncryptActive = false
+    @Published var lastScanSummary = "Chua quet"
+    @Published var lastScanDate: Date?
 
     private var crypto: K3Crypto?
     private var autoEncryptTimer: Timer?
@@ -383,8 +385,39 @@ final class AppState: ObservableObject {
         }
         let threats = findings.filter { $0.status == "Threat" }.count
         statusMessage = "Quet xong: \(threats) moi de doa, \(findings.count) file."
+        lastScanSummary = "\(threats) nguy hiem / \(findings.count) file"
+        lastScanDate = Date()
         K3HistoryManager.append(threats == 0 ? "INFO" : "WARN", statusMessage, root: usbRoot)
         refreshHistory()
+    }
+
+    func exportScanReport() {
+        guard !scanFindings.isEmpty else {
+            statusMessage = "Chua co ket qua quet de xuat bao cao."
+            return
+        }
+        do {
+            let report = try K3ScanReportManager.writeReport(findings: scanFindings, root: usbRoot)
+            statusMessage = "Da xuat bao cao: \(report.lastPathComponent)"
+            K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
+            refreshHistory()
+            NSWorkspace.shared.open(report)
+        } catch {
+            statusMessage = "Xuat bao cao that bai: \(error.localizedDescription)"
+        }
+    }
+
+    func applyUsbVaccine() {
+        do {
+            let result = try K3UsbVaccine.apply(at: usbRoot)
+            refreshQuarantine()
+            reloadFeatureData()
+            statusMessage = "Da vaccine USB. Autorun: \(result.autorunProtected ? "OK" : "bo qua"), cach ly \(result.quarantined) shortcut/script nghi ngo."
+            K3HistoryManager.append(result.quarantined == 0 ? "INFO" : "WARN", statusMessage, root: usbRoot)
+            refreshHistory()
+        } catch {
+            statusMessage = "USB vaccine that bai: \(error.localizedDescription)"
+        }
     }
 
     func scanCurrentFolder() {
@@ -397,6 +430,14 @@ final class AppState: ObservableObject {
 
     func scanUsbRoot() {
         scan(urls: [usbRoot])
+    }
+
+    func volumeUsage() -> VolumeUsage {
+        let values = try? usbRoot.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityKey])
+        return VolumeUsage(
+            total: Int64(values?.volumeTotalCapacity ?? 0),
+            free: Int64(values?.volumeAvailableCapacity ?? 0)
+        )
     }
 
     func updateClamAVDatabase() {

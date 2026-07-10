@@ -9,9 +9,9 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 - [x] ClamAV Mac portable arm64 tren USB.
 - [x] Login lockout 5 phut va wipe sau 10 lan sai.
 - [x] Lock & Eject: khoa session, thoat app, eject USB.
-- [ ] Scan report HTML.
-- [ ] Dashboard tong quan dung luong/lan quet/file ket.
-- [ ] USB vaccine co nut rieng.
+- [x] Scan report HTML.
+- [x] Dashboard tong quan dung luong/lan quet/file ket.
+- [x] USB vaccine co nut rieng.
 - [ ] Release builder script.
 
 ## Phase 2 - Data Security

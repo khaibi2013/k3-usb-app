@@ -19,6 +19,8 @@ struct MainView: View {
             header
             Divider()
             TabView {
+                dashboardTab
+                    .tabItem { Label("Tong quan", systemImage: "gauge.with.dots.needle.67percent") }
                 vaultTab
                     .tabItem { Label("Ket sat", systemImage: "externaldrive.badge.lock") }
                 securityTab
@@ -92,6 +94,96 @@ struct MainView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
         .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var dashboardTab: some View {
+        let usage = appState.volumeUsage()
+        let lastScan = appState.lastScanDate.map { dashboardDateFormatter.string(from: $0) } ?? "Chua quet"
+        return VStack(alignment: .leading, spacing: 16) {
+            SectionHeader(title: "Tong quan bao mat", subtitle: "Trang thai nhanh cua ket, ClamAV, USB va cac lan quet gan day")
+            HStack(spacing: 12) {
+                DashboardCard(
+                    title: "Ket dang mo",
+                    value: appState.isDecoyMode ? "Ket gia" : "Ket that",
+                    subtitle: "\(appState.vaultFiles.count) file ma hoa",
+                    icon: "externaldrive.badge.lock",
+                    tint: .teal
+                )
+                DashboardCard(
+                    title: "ClamAV",
+                    value: appState.antivirusEngineInfo.clamAvailable ? "San sang" : "Chua co",
+                    subtitle: appState.antivirusEngineInfo.clamScanPath ?? "K3 rules van hoat dong",
+                    icon: appState.antivirusEngineInfo.clamAvailable ? "checkmark.shield" : "exclamationmark.triangle",
+                    tint: appState.antivirusEngineInfo.clamAvailable ? .green : .orange
+                )
+                DashboardCard(
+                    title: "Lan quet gan nhat",
+                    value: appState.lastScanSummary,
+                    subtitle: lastScan,
+                    icon: "magnifyingglass",
+                    tint: .blue
+                )
+            }
+
+            HStack(spacing: 12) {
+                DashboardCard(
+                    title: "Dung luong USB",
+                    value: ByteCountFormatter.string(fromByteCount: usage.free, countStyle: .file) + " trong",
+                    subtitle: "\(ByteCountFormatter.string(fromByteCount: usage.used, countStyle: .file)) da dung / \(ByteCountFormatter.string(fromByteCount: usage.total, countStyle: .file))",
+                    icon: "externaldrive",
+                    tint: .purple
+                )
+                DashboardCard(
+                    title: "Cach ly",
+                    value: "\(appState.quarantineItems.count) muc",
+                    subtitle: "File nguy hiem da tach khoi USB",
+                    icon: "shippingbox",
+                    tint: .orange
+                )
+                DashboardCard(
+                    title: "Tin cay",
+                    value: "\(appState.trustedFiles.count) file",
+                    subtitle: "Duoc bo qua khi quet",
+                    icon: "checkmark.seal",
+                    tint: .cyan
+                )
+            }
+
+            HStack(spacing: 10) {
+                Button { appState.scanUsbRoot() } label: {
+                    Label("Quet USB", systemImage: "externaldrive.badge.magnifyingglass")
+                }
+                .buttonStyle(.borderedProminent)
+                Button { appState.exportScanReport() } label: {
+                    Label("Xuat bao cao HTML", systemImage: "doc.richtext")
+                }
+                .disabled(appState.scanFindings.isEmpty)
+                Button { appState.applyUsbVaccine() } label: {
+                    Label("USB vaccine", systemImage: "syringe")
+                }
+                Button { appState.repairPortableLayout() } label: {
+                    Label("Sua cau truc", systemImage: "bandage")
+                }
+                Spacer()
+            }
+
+            List(appState.securityRows) { row in
+                HStack {
+                    Image(systemName: row.status.lowercased().contains("thieu") || row.status.lowercased().contains("chua") ? "exclamationmark.triangle" : "checkmark.circle")
+                        .foregroundStyle(row.status.lowercased().contains("thieu") || row.status.lowercased().contains("chua") ? .orange : .green)
+                    VStack(alignment: .leading) {
+                        Text(row.name)
+                        Text(row.suggestion)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(row.status)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(16)
     }
 
     private var vaultTab: some View {
@@ -299,6 +391,12 @@ struct MainView: View {
                     Label("Cap nhat DB", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .disabled(!appState.antivirusEngineInfo.freshClamAvailable)
+                Button {
+                    appState.exportScanReport()
+                } label: {
+                    Label("Xuat bao cao", systemImage: "doc.richtext")
+                }
+                .disabled(appState.scanFindings.isEmpty)
             }
             HStack(spacing: 10) {
                 Button { appState.scanCurrentFolder() } label: {
@@ -550,6 +648,9 @@ struct MainView: View {
             Button { appState.repairPortableLayout() } label: {
                 Label("Sua cau truc portable", systemImage: "bandage")
             }
+            Button { appState.applyUsbVaccine() } label: {
+                Label("USB vaccine", systemImage: "syringe")
+            }
             Divider()
             Text("macOS khong cho tu dong chay USB autorun. Hay chay truc tiep file app tren USB/ISO.")
                 .foregroundStyle(.secondary)
@@ -749,6 +850,47 @@ private struct MetricTile: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
+
+private struct DashboardCard: View {
+    let title: String
+    let value: String
+    let subtitle: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 30)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.title3.bold())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+        .background(tint.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private let dashboardDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    return formatter
+}()
 
 private struct EmptyStateView: View {
     let icon: String

@@ -167,6 +167,152 @@ struct ScanFinding: Identifiable, Hashable {
     let signature: String
 }
 
+struct VolumeUsage {
+    let total: Int64
+    let free: Int64
+
+    var used: Int64 { max(0, total - free) }
+}
+
+enum K3ScanReportManager {
+    static func reportRoot(at root: URL) -> URL {
+        root.appendingPathComponent(".k3_scan_reports", isDirectory: true)
+    }
+
+    static func writeReport(findings: [ScanFinding], root: URL) throws -> URL {
+        let reportDir = reportRoot(at: root)
+        try FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
+        let reportURL = reportDir.appendingPathComponent("scan-report-\(fileTimestamp()).html")
+        let threats = findings.filter { $0.status == "Threat" }.count
+        let trusted = findings.filter { $0.status == "Trusted" }.count
+        let clean = findings.filter { $0.status == "Clean" }.count
+        let machine = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+        let rows = findings.map { finding in
+            """
+            <tr class="\(finding.status.lowercased())">
+              <td>\(escape(finding.url.lastPathComponent))</td>
+              <td>\(escape(finding.url.path))</td>
+              <td>\(escape(statusText(finding.status)))</td>
+              <td>\(escape(finding.signature))</td>
+            </tr>
+            """
+        }.joined(separator: "\n")
+
+        let html = """
+        <!doctype html>
+        <html lang="vi">
+        <head>
+          <meta charset="utf-8">
+          <title>K3 Scan Report</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 28px; color: #202124; }
+            h1 { margin-bottom: 4px; }
+            .meta { color: #666; margin-bottom: 22px; }
+            .cards { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 12px; margin-bottom: 24px; }
+            .card { border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
+            .value { font-size: 28px; font-weight: 700; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { text-align: left; border-bottom: 1px solid #e5e5e5; padding: 10px; vertical-align: top; }
+            th { background: #f6f7f8; }
+            tr.threat td { color: #b00020; }
+            tr.trusted td { color: #0b57d0; }
+            tr.clean td { color: #137333; }
+          </style>
+        </head>
+        <body>
+          <h1>USB An Toan K3 - Bao cao quet virus</h1>
+          <div class="meta">
+            Thoi gian: \(escape(timestamp()))<br>
+            May quet: \(escape(machine))<br>
+            USB: \(escape(root.path))
+          </div>
+          <div class="cards">
+            <div class="card"><div class="value">\(findings.count)</div><div>Tong file</div></div>
+            <div class="card"><div class="value">\(threats)</div><div>Nguy hiem</div></div>
+            <div class="card"><div class="value">\(trusted)</div><div>Tin cay</div></div>
+            <div class="card"><div class="value">\(clean)</div><div>Sach</div></div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Ten file</th><th>Duong dan</th><th>Trang thai</th><th>Chu ky</th></tr>
+            </thead>
+            <tbody>
+              \(rows)
+            </tbody>
+          </table>
+        </body>
+        </html>
+        """
+
+        try html.write(to: reportURL, atomically: true, encoding: .utf8)
+        try MacSystemTools.hide(reportDir)
+        return reportURL
+    }
+
+    private static func statusText(_ status: String) -> String {
+        switch status {
+        case "Threat": return "Nguy hiem"
+        case "Trusted": return "Tin cay"
+        case "Clean": return "Sach"
+        default: return status
+        }
+    }
+
+    private static func escape(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+    }
+}
+
+enum K3UsbVaccine {
+    static func apply(at root: URL) throws -> (autorunProtected: Bool, quarantined: Int) {
+        let autorun = root.appendingPathComponent("autorun.inf")
+        let content = """
+        [AutoRun]
+        label=USB An Toan K3
+        icon=AnToanUSB.exe
+        action=Mo USB An Toan K3
+        open=AnToanUSB.exe
+        shellexecute=AnToanUSB.exe
+        shell\\open=Mo USB An Toan K3
+        shell\\open\\command=AnToanUSB.exe
+        shell\\explore=Mo thu muc USB
+        shell\\explore\\command=explorer.exe .
+        """
+        MacSystemTools.clearHidden(autorun)
+        try content.write(to: autorun, atomically: true, encoding: .utf8)
+        try MacSystemTools.hide(autorun)
+
+        var quarantined = 0
+        let suspicious = suspiciousRootItems(at: root)
+        for file in suspicious {
+            let result = K3MacScanner.scan(file, root: root)
+            guard result.isThreat else { continue }
+            if (try? K3QuarantineManager.quarantine(file, virusName: result.name, root: root)) == true {
+                quarantined += 1
+            }
+        }
+
+        try K3PortableLayout.hideSupportFiles(at: root)
+        return (true, quarantined)
+    }
+
+    private static func suspiciousRootItems(at root: URL) -> [URL] {
+        guard let items = try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isRegularFileKey], options: []) else {
+            return []
+        }
+        let riskyExtensions = ["lnk", "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "scr", "pif", "com", "ps1", "cmd", "bat", "scf", "url"]
+        return items.filter { url in
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { return false }
+            if ["AnToanUSB.exe", "autorun.inf"].contains(url.lastPathComponent) { return false }
+            return riskyExtensions.contains(url.pathExtension.lowercased())
+        }
+    }
+}
+
 struct RecoverySnapshotResult: Hashable {
     let snapshotURL: URL
     let itemCount: Int
@@ -380,6 +526,12 @@ enum K3DataWiper {
 private func timestamp() -> String {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    return formatter.string(from: Date())
+}
+
+private func fileTimestamp() -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyyMMdd-HHmmss"
     return formatter.string(from: Date())
 }
 
