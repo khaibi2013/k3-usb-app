@@ -511,6 +511,12 @@ struct MainView: View {
                     Label("Khoi phuc", systemImage: "arrow.uturn.backward")
                 }
                 .disabled(selectedQuarantine == nil)
+                Button {
+                    if let item = selectedQuarantine { appState.trustQuarantineAndRestore(item) }
+                } label: {
+                    Label("Tin cay & khoi phuc", systemImage: "checkmark.seal")
+                }
+                .disabled(selectedQuarantine == nil)
                 Button(role: .destructive) {
                     if let item = selectedQuarantine { appState.deleteQuarantine(item) }
                 } label: {
@@ -940,6 +946,8 @@ private struct SettingsPane: View {
     @State private var showHidden = false
     @State private var wipeHistory = false
     @State private var wipeMacos = true
+    @State private var autoScanOnLogin = false
+    @State private var selfDestructMode = "wipe_all"
 
     var body: some View {
         Form {
@@ -979,6 +987,19 @@ private struct SettingsPane: View {
                 Toggle("Don metadata macOS khi thoat", isOn: $wipeMacos)
             }
 
+            Section("Bao mat dang nhap") {
+                Toggle("Tu dong quet USB sau khi dang nhap", isOn: $autoScanOnLogin)
+                Picker("Nhap sai 10 lan", selection: $selfDestructMode) {
+                    Text("Tat tu huy, chi khoa 5 phut").tag("off")
+                    Text("Khoa vinh vien").tag("lock")
+                    Text("Xoa ket that").tag("wipe_real")
+                    Text("Xoa tat ca du lieu bao mat").tag("wipe_all")
+                }
+                Text("Canh bao: cac lua chon xoa se xoa du lieu that khi nhap sai 10 lan. Hay bat chi khi da co ban sao luu/khoa khoi phuc.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
             Button {
                 appState.saveSettings(
                     loginTitle: loginTitle,
@@ -989,7 +1010,9 @@ private struct SettingsPane: View {
                     autoDecrypt: autoDecrypt,
                     showHidden: showHidden,
                     wipeHistory: wipeHistory,
-                    wipeMacos: wipeMacos
+                    wipeMacos: wipeMacos,
+                    autoScanOnLogin: autoScanOnLogin,
+                    selfDestructMode: selfDestructMode
                 )
             } label: {
                 Label("Luu cai dat", systemImage: "square.and.arrow.down")
@@ -1005,6 +1028,8 @@ private struct SettingsPane: View {
             showHidden = appState.config.showHidden == "true"
             wipeHistory = appState.config.wipeHistory == "true"
             wipeMacos = appState.config.wipeMacos == "true"
+            autoScanOnLogin = appState.config.autoScanOnLogin == "true"
+            selfDestructMode = appState.config.selfDestructMode
         }
     }
 }

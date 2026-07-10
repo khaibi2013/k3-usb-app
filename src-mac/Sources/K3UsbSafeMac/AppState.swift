@@ -109,6 +109,9 @@ final class AppState: ObservableObject {
         reloadFeatureData()
         loadLocalBrowser(at: browserURL)
         startAutoEncryptWatcher()
+        if config.autoScanOnLogin == "true" {
+            scan(urls: [usbRoot], createSnapshot: false)
+        }
     }
 
     private func registerFailedLogin() throws {
@@ -116,11 +119,30 @@ final class AppState: ObservableObject {
         let failed = config.failedLoginCount
 
         if failed >= 10 {
-            K3HistoryManager.append("CRITICAL", "Nhap sai mat khau 10 lan. Dang xoa du lieu bao mat.", root: usbRoot)
-            try K3DataWiper.wipeSensitiveData(at: usbRoot)
-            config = K3Config.defaultConfig()
-            statusMessage = "Da xoa du lieu sau 10 lan sai mat khau."
-            throw K3Error.userFacing("Sai mat khau 10 lan. Du lieu bao mat da bi xoa.")
+            switch config.selfDestructMode {
+            case "off":
+                config.lockedUntil = Date().addingTimeInterval(5 * 60)
+                try K3ConfigStore.save(config, at: usbRoot)
+                throw K3Error.userFacing("Sai mat khau \(failed) lan. Tu huy dang tat, da khoa 5 phut.")
+            case "lock":
+                config.lockedUntil = Date.distantFuture
+                try K3ConfigStore.save(config, at: usbRoot)
+                K3HistoryManager.append("CRITICAL", "Nhap sai mat khau 10 lan. Da khoa vinh vien theo chinh sach.", root: usbRoot)
+                throw K3Error.userFacing("Sai mat khau 10 lan. USB da bi khoa vinh vien.")
+            case "wipe_real":
+                K3HistoryManager.append("CRITICAL", "Nhap sai mat khau 10 lan. Dang xoa ket that theo chinh sach.", root: usbRoot)
+                try K3DataWiper.wipeRealVaultOnly(at: usbRoot)
+                config.failedLoginCount = 0
+                config.lockedUntil = nil
+                try K3ConfigStore.save(config, at: usbRoot)
+                throw K3Error.userFacing("Sai mat khau 10 lan. Ket that da bi xoa.")
+            default:
+                K3HistoryManager.append("CRITICAL", "Nhap sai mat khau 10 lan. Dang xoa du lieu bao mat.", root: usbRoot)
+                try K3DataWiper.wipeSensitiveData(at: usbRoot)
+                config = K3Config.defaultConfig()
+                statusMessage = "Da xoa du lieu sau 10 lan sai mat khau."
+                throw K3Error.userFacing("Sai mat khau 10 lan. Du lieu bao mat da bi xoa.")
+            }
         }
 
         if failed >= 5 {
@@ -356,9 +378,9 @@ final class AppState: ObservableObject {
         reloadSecurityRows()
     }
 
-    func scan(urls: [URL]) {
+    func scan(urls: [URL], createSnapshot: Bool = true) {
         var findings: [ScanFinding] = []
-        if let snapshot = try? K3RecoverySnapshotManager.createSnapshot(for: urls, root: usbRoot) {
+        if createSnapshot, let snapshot = try? K3RecoverySnapshotManager.createSnapshot(for: urls, root: usbRoot) {
             K3HistoryManager.append("INFO", "Da tao snapshot phuc hoi: \(snapshot.fileCount) file, \(snapshot.bytes / 1024) KB", root: usbRoot)
         }
         for url in urls {
@@ -491,6 +513,20 @@ final class AppState: ObservableObject {
         }
     }
 
+    func trustQuarantineAndRestore(_ item: QuarantineItem) {
+        do {
+            _ = try K3TrustedFileManager.trustQuarantined(item, root: usbRoot)
+            try K3QuarantineManager.restore(item)
+            statusMessage = "Da tin cay va khoi phuc \(item.originalName)."
+            K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
+            refreshTrustedFiles()
+            refreshQuarantine()
+            refreshHistory()
+        } catch {
+            statusMessage = "Tin cay/khoi phuc that bai: \(error.localizedDescription)"
+        }
+    }
+
     func refreshQuarantine() {
         quarantineItems = K3QuarantineManager.list(at: usbRoot)
     }
@@ -592,7 +628,9 @@ final class AppState: ObservableObject {
         autoDecrypt: Bool,
         showHidden: Bool,
         wipeHistory: Bool,
-        wipeMacos: Bool
+        wipeMacos: Bool,
+        autoScanOnLogin: Bool,
+        selfDestructMode: String
     ) {
         do {
             config.loginTitle = loginTitle.isEmpty ? "USB An Toan K3" : loginTitle
@@ -604,6 +642,8 @@ final class AppState: ObservableObject {
             config.showHidden = showHidden ? "true" : "false"
             config.wipeHistory = wipeHistory ? "true" : "false"
             config.wipeMacos = wipeMacos ? "true" : "false"
+            config.autoScanOnLogin = autoScanOnLogin ? "true" : "false"
+            config.selfDestructMode = selfDestructMode
             try K3ConfigStore.save(config, at: usbRoot)
             statusMessage = "Da luu cai dat."
             K3HistoryManager.append("INFO", statusMessage, root: usbRoot)

@@ -7,7 +7,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 - [x] macOS app SwiftUI portable.
 - [x] Crypto tuong thich Windows.
 - [x] ClamAV Mac portable arm64 tren USB.
-- [x] Login lockout 5 phut va wipe sau 10 lan sai.
+- [x] Login lockout 5 phut va chinh sach tu huy sau 10 lan sai.
 - [x] Lock & Eject: khoa session, thoat app, eject USB.
 - [x] Scan report HTML.
 - [x] Dashboard tong quan dung luong/lan quet/file ket.
@@ -16,7 +16,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 
 ## Phase 2 - Data Security
 
-- [ ] Self-destruct policy UI: off / lock only / wipe real vault / wipe all sensitive data.
+- [x] Self-destruct policy UI: off / lock only / wipe real vault / wipe all sensitive data.
 - [ ] Folder encryption with structure preservation.
 - [ ] Integrity manifest for app/tools/rules.
 - [ ] Recovery key architecture design.
@@ -24,10 +24,10 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 
 ## Phase 3 - Antivirus And Safety
 
-- [ ] Auto scan on login/start.
+- [x] Auto scan on login/start.
 - [ ] Strong quarantine detail view.
-- [ ] Restore quarantine to original path.
-- [ ] Trust from quarantine.
+- [x] Restore quarantine to original path.
+- [x] Trust from quarantine.
 - [ ] K3 rule updater from URL/file.
 - [ ] Scan report export HTML/PDF.
 

@@ -44,6 +44,18 @@ enum K3TrustedFileManager {
         try save(entries(at: root).filter { $0.hash != entry.hash }, at: root)
     }
 
+    @discardableResult
+    static func trustQuarantined(_ item: QuarantineItem, root: URL) throws -> Bool {
+        guard let hash = sha256(item.quarantinedURL) else { return false }
+        var values = entries(at: root)
+        if values.contains(where: { $0.hash.caseInsensitiveCompare(hash) == .orderedSame }) {
+            return true
+        }
+        values.append(TrustedFileEntry(id: hash, hash: hash, name: item.originalName, addedAt: timestamp()))
+        try save(values, at: root)
+        return true
+    }
+
     static func sha256(_ file: URL) -> String? {
         guard let data = try? Data(contentsOf: file) else { return nil }
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -483,6 +495,10 @@ enum K3Maintenance {
 }
 
 enum K3DataWiper {
+    static func wipeRealVaultOnly(at root: URL) throws {
+        try wipe(root.appendingPathComponent(".vault", isDirectory: true))
+    }
+
     static func wipeSensitiveData(at root: URL) throws {
         let targets = [
             ".vault",

@@ -16,6 +16,8 @@ struct K3Config: Codable {
     var loginTitle: String
     var loginHelp: String
     var hideLoginHelp: String
+    var autoScanOnLogin: String
+    var selfDestructMode: String
     var failedLoginCount: Int
     var lockedUntil: Date?
     var needsInitialSetup: Bool = false
@@ -34,6 +36,8 @@ struct K3Config: Codable {
         case loginTitle = "login_title"
         case loginHelp = "login_help"
         case hideLoginHelp = "hide_login_help"
+        case autoScanOnLogin = "auto_scan_on_login"
+        case selfDestructMode = "self_destruct_mode"
         case failedLoginCount = "failed_login_count"
         case lockedUntil = "locked_until"
     }
@@ -52,6 +56,8 @@ struct K3Config: Codable {
         loginTitle: String,
         loginHelp: String,
         hideLoginHelp: String,
+        autoScanOnLogin: String = "false",
+        selfDestructMode: String = "wipe_all",
         failedLoginCount: Int = 0,
         lockedUntil: Date? = nil,
         needsInitialSetup: Bool = false
@@ -69,6 +75,8 @@ struct K3Config: Codable {
         self.loginTitle = loginTitle
         self.loginHelp = loginHelp
         self.hideLoginHelp = hideLoginHelp
+        self.autoScanOnLogin = autoScanOnLogin
+        self.selfDestructMode = selfDestructMode
         self.failedLoginCount = failedLoginCount
         self.lockedUntil = lockedUntil
         self.needsInitialSetup = needsInitialSetup
@@ -89,6 +97,8 @@ struct K3Config: Codable {
         loginTitle = try container.decodeIfPresent(String.self, forKey: .loginTitle) ?? "USB An Toan K3"
         loginHelp = try container.decodeIfPresent(String.self, forKey: .loginHelp) ?? "Tro giup HELP!"
         hideLoginHelp = try container.decodeIfPresent(String.self, forKey: .hideLoginHelp) ?? "false"
+        autoScanOnLogin = try container.decodeIfPresent(String.self, forKey: .autoScanOnLogin) ?? "false"
+        selfDestructMode = try container.decodeIfPresent(String.self, forKey: .selfDestructMode) ?? "wipe_all"
         failedLoginCount = try container.decodeIfPresent(Int.self, forKey: .failedLoginCount) ?? 0
         lockedUntil = try container.decodeIfPresent(Date.self, forKey: .lockedUntil)
         needsInitialSetup = false
@@ -109,6 +119,8 @@ struct K3Config: Codable {
             loginTitle: "USB An Toan K3",
             loginHelp: "Tro giup HELP!",
             hideLoginHelp: "false",
+            autoScanOnLogin: "false",
+            selfDestructMode: "wipe_all",
             needsInitialSetup: true
         )
     }
