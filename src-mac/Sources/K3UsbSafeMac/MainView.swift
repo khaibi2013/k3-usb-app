@@ -157,6 +157,12 @@ struct MainView: View {
                 )
             }
 
+            HStack {
+                Label("Phien ban \(K3Version.display)", systemImage: "info.circle")
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+
             HStack(spacing: 10) {
                 Button { appState.scanUsbRoot() } label: {
                     Label("Quet USB", systemImage: "externaldrive.badge.magnifyingglass")
@@ -721,6 +727,20 @@ struct MainView: View {
     private var maintenanceTab: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "Cong cu bao tri", subtitle: "Cac thao tac sua loi/don dep an toan cho macOS")
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "number.square")
+                    .foregroundStyle(.teal)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Phien ban \(K3Version.display)")
+                        .font(.headline)
+                    ForEach(K3Version.changelog, id: \.self) { item in
+                        Text("- \(item)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Divider()
             Button { appState.cleanupMacMetadata() } label: {
                 Label("Don metadata macOS", systemImage: "sparkles")
             }

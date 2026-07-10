@@ -36,7 +36,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 - [ ] License bound to USB serial.
 - [x] Clone detection warning.
 - [ ] Branding package per customer.
-- [ ] Version/changelog screen.
+- [x] Version/changelog screen.
 - [ ] Windows and macOS release builder.
 - [ ] QA release report.
 
