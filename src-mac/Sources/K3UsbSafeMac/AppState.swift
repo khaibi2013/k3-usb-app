@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import SwiftUI
 
 final class AppState: ObservableObject {
@@ -74,6 +75,10 @@ final class AppState: ObservableObject {
         usbRoot.appendingPathComponent(isDecoyMode ? ".vault_decoy" : ".vault", isDirectory: true)
     }
 
+    var baoMatURL: URL {
+        usbRoot.appendingPathComponent("BaoMat", isDirectory: true)
+    }
+
     func refreshVault() {
         do {
             vaultFiles = try K3Vault.listEncryptedFiles(in: vaultURL)
@@ -108,6 +113,56 @@ final class AppState: ObservableObject {
             statusMessage = "Encrypted \(files.count) item(s)."
         } catch {
             statusMessage = "Encrypt failed: \(error.localizedDescription)"
+        }
+    }
+
+    func createAndEncryptTextNote(title: String, content: String) {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            statusMessage = "Note title is required."
+            return
+        }
+        guard let crypto else { return }
+        do {
+            let safeTitle = sanitizedFileName(title)
+            let temporaryDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("K3Note-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+            let noteURL = temporaryDirectory.appendingPathComponent("\(safeTitle).txt")
+            try content.write(to: noteURL, atomically: true, encoding: .utf8)
+            try K3Vault.encrypt(file: noteURL, into: vaultURL, crypto: crypto)
+            refreshVault()
+            statusMessage = "Encrypted note \(safeTitle).txt."
+            K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
+            refreshHistory()
+        } catch {
+            statusMessage = "Create note failed: \(error.localizedDescription)"
+        }
+    }
+
+    func encryptBaoMatFiles() {
+        do {
+            try FileManager.default.createDirectory(at: baoMatURL, withIntermediateDirectories: true)
+            let files = scanFiles(at: baoMatURL).filter { $0.pathExtension.lowercased() != "k3enc" }
+            guard !files.isEmpty else {
+                statusMessage = "BaoMat has no files to encrypt."
+                return
+            }
+            encryptIntoVault(files: files)
+        } catch {
+            statusMessage = "BaoMat encrypt failed: \(error.localizedDescription)"
+        }
+    }
+
+    func openBaoMatInFinder() {
+        do {
+            try FileManager.default.createDirectory(at: baoMatURL, withIntermediateDirectories: true)
+            MacSystemTools.clearHidden(baoMatURL)
+            NSWorkspace.shared.open(baoMatURL)
+            statusMessage = "Opened BaoMat folder."
+        } catch {
+            statusMessage = "Open BaoMat failed: \(error.localizedDescription)"
         }
     }
 
@@ -389,6 +444,15 @@ final class AppState: ObservableObject {
                   (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { return nil }
             return file
         }
+    }
+
+    private func sanitizedFileName(_ value: String) -> String {
+        let invalid = CharacterSet(charactersIn: "/\\?%*|\"<>:")
+        let cleaned = value
+            .components(separatedBy: invalid)
+            .joined(separator: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Secure Note" : cleaned
     }
 }
 

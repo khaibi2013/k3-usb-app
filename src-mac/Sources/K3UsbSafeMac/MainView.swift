@@ -11,6 +11,7 @@ struct MainView: View {
     @State private var showingDecryptFolder = false
     @State private var showingScanImporter = false
     @State private var showingTrustImporter = false
+    @State private var showingNewNote = false
     @State private var scanAllowsDirectories = true
 
     var body: some View {
@@ -57,6 +58,11 @@ struct MainView: View {
         .fileImporter(isPresented: $showingTrustImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
                 appState.trust(files: urls)
+            }
+        }
+        .sheet(isPresented: $showingNewNote) {
+            NewNoteSheet { title, content in
+                appState.createAndEncryptTextNote(title: title, content: content)
             }
         }
         .onAppear { appState.reloadFeatureData() }
@@ -110,6 +116,18 @@ struct MainView: View {
                     Label("Encrypt Files", systemImage: "lock.doc")
                 }
                 .buttonStyle(.borderedProminent)
+                Button { showingNewNote = true } label: {
+                    Label("New Note", systemImage: "note.text.badge.plus")
+                }
+                .buttonStyle(.bordered)
+                Button { appState.openBaoMatInFinder() } label: {
+                    Label("Open BaoMat", systemImage: "folder")
+                }
+                .buttonStyle(.bordered)
+                Button { appState.encryptBaoMatFiles() } label: {
+                    Label("Encrypt BaoMat", systemImage: "folder.badge.lock")
+                }
+                .buttonStyle(.bordered)
                 Button { showingDecryptFolder = true } label: {
                     Label("Decrypt Selected", systemImage: "lock.open")
                 }
@@ -146,6 +164,27 @@ struct MainView: View {
                         primaryIcon: "lock.doc"
                     ) {
                         showingImporter = true
+                    }
+                    .overlay(alignment: .bottom) {
+                        HStack(spacing: 10) {
+                            Button {
+                                showingNewNote = true
+                            } label: {
+                                Label("Write Note", systemImage: "note.text.badge.plus")
+                            }
+                            Button {
+                                appState.openBaoMatInFinder()
+                            } label: {
+                                Label("Open BaoMat", systemImage: "folder")
+                            }
+                            Button {
+                                appState.encryptBaoMatFiles()
+                            } label: {
+                                Label("Encrypt BaoMat", systemImage: "folder.badge.lock")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .padding(.bottom, 48)
                     }
                 } else {
                     List(appState.vaultFiles, selection: $selectedItem) { item in
@@ -423,6 +462,42 @@ struct MainView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(8)
+    }
+}
+
+private struct NewNoteSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = "Secure Note"
+    @State private var content = ""
+    let onSave: (String, String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("New Secure Note")
+                .font(.title3.bold())
+            TextField("File name", text: $title)
+                .textFieldStyle(.roundedBorder)
+            TextEditor(text: $content)
+                .font(.body)
+                .frame(minHeight: 220)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.secondary.opacity(0.25))
+                }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button {
+                    onSave(title, content)
+                    dismiss()
+                } label: {
+                    Label("Encrypt Note", systemImage: "lock.doc")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 520, height: 380)
     }
 }
 
