@@ -1116,102 +1116,168 @@ private struct SettingsPane: View {
     @State private var showingDestructivePolicyAlert = false
 
     var body: some View {
-        Form {
-            Section("Mat khau") {
-                SecureField("Mat khau that moi", text: $realPassword)
-                SecureField("Mat khau gia moi", text: $decoyPassword)
-                Button {
-                    appState.changePasswords(realPassword: realPassword, decoyPassword: decoyPassword)
-                    realPassword = ""
-                    decoyPassword = ""
-                } label: {
-                    Label("Luu mat khau", systemImage: "key")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                SettingsGroup(title: "Mat khau") {
+                    settingsRow("Mat khau that moi") {
+                        SecureField("Mat khau that moi", text: $realPassword)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    settingsRow("Mat khau gia moi") {
+                        SecureField("Mat khau gia moi", text: $decoyPassword)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    HStack {
+                        Spacer().frame(width: 190)
+                        Button {
+                            appState.changePasswords(realPassword: realPassword, decoyPassword: decoyPassword)
+                            realPassword = ""
+                            decoyPassword = ""
+                        } label: {
+                            Label("Luu mat khau", systemImage: "key")
+                        }
+                    }
                 }
-            }
 
-            Section("Dang nhap") {
-                TextField("Tieu de dang nhap", text: $loginTitle)
-                TextField("Noi dung tro giup", text: $loginHelp)
-                Toggle("An tro giup dang nhap", isOn: $hideLoginHelp)
-            }
-
-            Section("Cai dat chung") {
-                Picker("Thu muc tu dong ma hoa", selection: $autoEncryptFolder) {
-                    Text("BaoMat").tag("BaoMat")
-                    Text("Toan bo USB").tag("Toan bo USB")
-                    Text("Tat").tag("")
+                SettingsGroup(title: "Dang nhap") {
+                    settingsRow("Tieu de dang nhap") {
+                        TextField("Tieu de dang nhap", text: $loginTitle)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    settingsRow("Noi dung tro giup") {
+                        TextField("Noi dung tro giup", text: $loginHelp)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    settingsRow("") {
+                        Toggle("An tro giup dang nhap", isOn: $hideLoginHelp)
+                    }
                 }
-                Picker("Dung luong ma hoa toi da", selection: $maxSizeBytes) {
-                    Text("Khong gioi han").tag("-1")
-                    Text("1 GB").tag("\(1 * 1024 * 1024 * 1024)")
-                    Text("2 GB").tag("\(2 * 1024 * 1024 * 1024)")
-                    Text("4 GB").tag("\(4 * 1024 * 1024 * 1024)")
-                }
-                Toggle("Tu dong giai ma khi dua ra may", isOn: $autoDecrypt)
-                Toggle("Hien file an", isOn: $showHidden)
-                Toggle("Xoa nhat ky K3 khi thoat", isOn: $wipeHistory)
-                Toggle("Don metadata macOS khi thoat", isOn: $wipeMacos)
-            }
 
-            Section("Cap nhat rules") {
-                TextField("URL k3-rules.json", text: $k3RuleUpdateURL)
+                SettingsGroup(title: "Cai dat chung") {
+                    settingsRow("Thu muc tu dong ma hoa") {
+                        Picker("Thu muc tu dong ma hoa", selection: $autoEncryptFolder) {
+                            Text("BaoMat").tag("BaoMat")
+                            Text("Toan bo USB").tag("Toan bo USB")
+                            Text("Tat").tag("")
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 260, alignment: .leading)
+                    }
+                    settingsRow("Dung luong ma hoa toi da") {
+                        Picker("Dung luong ma hoa toi da", selection: $maxSizeBytes) {
+                            Text("Khong gioi han").tag("-1")
+                            Text("1 GB").tag("\(1 * 1024 * 1024 * 1024)")
+                            Text("2 GB").tag("\(2 * 1024 * 1024 * 1024)")
+                            Text("4 GB").tag("\(4 * 1024 * 1024 * 1024)")
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 260, alignment: .leading)
+                    }
+                    settingsRow("") {
+                        Toggle("Tu dong giai ma khi dua ra may", isOn: $autoDecrypt)
+                    }
+                    settingsRow("") {
+                        Toggle("Hien file an", isOn: $showHidden)
+                    }
+                    settingsRow("") {
+                        Toggle("Xoa nhat ky K3 khi thoat", isOn: $wipeHistory)
+                    }
+                    settingsRow("") {
+                        Toggle("Don metadata macOS khi thoat", isOn: $wipeMacos)
+                    }
+                }
+
+                SettingsGroup(title: "Cap nhat rules") {
+                    settingsRow("URL k3-rules.json") {
+                        TextField("URL k3-rules.json", text: $k3RuleUpdateURL)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    HStack(alignment: .center, spacing: 12) {
+                        Spacer().frame(width: 190)
+                        Button {
+                            appState.updateK3RulesFromConfiguredURL()
+                        } label: {
+                            Label("Cap nhat K3 rules", systemImage: "arrow.down.doc")
+                        }
+                        .disabled(k3RuleUpdateURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Text("Luu cai dat truoc khi cap nhat tu URL moi.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                SettingsGroup(title: "Bao mat dang nhap") {
+                    settingsRow("") {
+                        Toggle("Tu dong quet USB sau khi dang nhap", isOn: $autoScanOnLogin)
+                    }
+                    settingsRow("Nhap sai 10 lan") {
+                        Picker("Nhap sai 10 lan", selection: $selfDestructMode) {
+                            Text("Tat tu huy, chi khoa 5 phut").tag("off")
+                            Text("Khoa vinh vien").tag("lock")
+                            Text("Xoa ket that").tag("wipe_real")
+                            Text("Xoa tat ca du lieu bao mat").tag("wipe_all")
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 360, alignment: .leading)
+                    }
+                    HStack(alignment: .top) {
+                        Spacer().frame(width: 190)
+                        Text("Canh bao: cac lua chon xoa se xoa du lieu that khi nhap sai 10 lan. Hay bat chi khi da co ban sao luu/khoa khoi phuc.")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                SettingsGroup(title: "Chong clone USB") {
+                    settingsRow("Trang thai") {
+                        Text(appState.config.macHwid.isEmpty ? "Chua gan USB voi may macOS." : appState.isMacCloneWarning ? "Canh bao: USB nay khong khop dinh danh da gan." : "USB dang khop dinh danh macOS.")
+                            .foregroundStyle(appState.isMacCloneWarning ? .red : .secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    settingsRow("Dinh danh hien tai") {
+                        Text(appState.currentMacHwid)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack {
+                        Spacer().frame(width: 190)
+                        Button {
+                            appState.bindMacHwid()
+                        } label: {
+                            Label("Gan USB nay", systemImage: "link")
+                        }
+                        Button(role: .destructive) {
+                            appState.clearMacHwid()
+                        } label: {
+                            Label("Bo gan", systemImage: "link.badge.minus")
+                        }
+                        .disabled(appState.config.macHwid.isEmpty)
+                    }
+                }
+
                 HStack {
+                    Spacer().frame(width: 190)
                     Button {
-                        appState.updateK3RulesFromConfiguredURL()
+                        if isDestructiveSelfDestructMode, selfDestructMode != appState.config.selfDestructMode {
+                            showingDestructivePolicyAlert = true
+                        } else {
+                            saveSettings()
+                        }
                     } label: {
-                        Label("Cap nhat K3 rules", systemImage: "arrow.down.doc")
+                        Label("Luu cai dat", systemImage: "square.and.arrow.down")
                     }
-                    .disabled(k3RuleUpdateURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Text("Luu cai dat truoc khi cap nhat tu URL moi.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .buttonStyle(.borderedProminent)
                 }
             }
-
-            Section("Bao mat dang nhap") {
-                Toggle("Tu dong quet USB sau khi dang nhap", isOn: $autoScanOnLogin)
-                Picker("Nhap sai 10 lan", selection: $selfDestructMode) {
-                    Text("Tat tu huy, chi khoa 5 phut").tag("off")
-                    Text("Khoa vinh vien").tag("lock")
-                    Text("Xoa ket that").tag("wipe_real")
-                    Text("Xoa tat ca du lieu bao mat").tag("wipe_all")
-                }
-                Text("Canh bao: cac lua chon xoa se xoa du lieu that khi nhap sai 10 lan. Hay bat chi khi da co ban sao luu/khoa khoi phuc.")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            Section("Chong clone USB") {
-                Text(appState.config.macHwid.isEmpty ? "Chua gan USB voi may macOS." : appState.isMacCloneWarning ? "Canh bao: USB nay khong khop dinh danh da gan." : "USB dang khop dinh danh macOS.")
-                    .foregroundStyle(appState.isMacCloneWarning ? .red : .secondary)
-                Text(appState.currentMacHwid)
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                HStack {
-                    Button {
-                        appState.bindMacHwid()
-                    } label: {
-                        Label("Gan USB nay", systemImage: "link")
-                    }
-                    Button(role: .destructive) {
-                        appState.clearMacHwid()
-                    } label: {
-                        Label("Bo gan", systemImage: "link.badge.minus")
-                    }
-                    .disabled(appState.config.macHwid.isEmpty)
-                }
-            }
-
-            Button {
-                if isDestructiveSelfDestructMode, selfDestructMode != appState.config.selfDestructMode {
-                    showingDestructivePolicyAlert = true
-                } else {
-                    saveSettings()
-                }
-            } label: {
-                Label("Luu cai dat", systemImage: "square.and.arrow.down")
-            }
+            .frame(maxWidth: 980, alignment: .topLeading)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 18)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .alert("Xac nhan chinh sach tu huy", isPresented: $showingDestructivePolicyAlert) {
             Button("Huy", role: .cancel) {}
             Button("Toi hieu, van luu", role: .destructive) {
@@ -1236,6 +1302,16 @@ private struct SettingsPane: View {
         }
     }
 
+    private func settingsRow<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            Text(label)
+                .frame(width: 176, alignment: .trailing)
+                .foregroundStyle(label.isEmpty ? .clear : .primary)
+            content()
+                .frame(maxWidth: 620, alignment: .leading)
+        }
+    }
+
     private var isDestructiveSelfDestructMode: Bool {
         selfDestructMode == "wipe_real" || selfDestructMode == "wipe_all"
     }
@@ -1255,5 +1331,24 @@ private struct SettingsPane: View {
             selfDestructMode: selfDestructMode,
             k3RuleUpdateURL: k3RuleUpdateURL
         )
+    }
+}
+
+private struct SettingsGroup<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                content
+            }
+            .padding(.top, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } label: {
+            Text(title)
+                .font(.headline)
+        }
+        .groupBoxStyle(.automatic)
     }
 }
