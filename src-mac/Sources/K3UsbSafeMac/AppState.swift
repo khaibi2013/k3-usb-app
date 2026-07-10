@@ -14,12 +14,15 @@ final class AppState: ObservableObject {
     @Published var trustedFiles: [TrustedFileEntry] = []
     @Published var historyEntries: [HistoryEntry] = []
     @Published var securityRows: [SecurityRow] = []
+    @Published var browserURL: URL
+    @Published var localItems: [LocalFileItem] = []
 
     private var crypto: K3Crypto?
 
     init() {
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
         self.usbRoot = cwd
+        self.browserURL = cwd
         self.config = K3Config.defaultConfig()
     }
 
@@ -29,6 +32,7 @@ final class AppState: ObservableObject {
             try K3PortableLayout.ensure(at: usbRoot)
             try K3PortableLayout.hideSupportFiles(at: usbRoot)
             reloadFeatureData()
+            loadLocalBrowser(at: usbRoot)
             statusMessage = "Ready"
         } catch {
             statusMessage = "Setup warning: \(error.localizedDescription)"
@@ -60,6 +64,7 @@ final class AppState: ObservableObject {
         K3HistoryManager.append("INFO", isDecoyMode ? "Logged in to decoy vault" : "Logged in to secure vault", root: usbRoot)
         refreshVault()
         reloadFeatureData()
+        loadLocalBrowser(at: browserURL)
     }
 
     func logout() {
@@ -116,6 +121,75 @@ final class AppState: ObservableObject {
         }
     }
 
+    func loadLocalBrowser(at folder: URL) {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            statusMessage = "Folder not found."
+            return
+        }
+
+        browserURL = folder
+        do {
+            let keys: [URLResourceKey] = [.isDirectoryKey, .isHiddenKey, .fileSizeKey, .contentModificationDateKey]
+            let urls = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys, options: [])
+            localItems = urls.compactMap { url in
+                let values = try? url.resourceValues(forKeys: Set(keys))
+                if values?.isHidden == true && config.showHidden != "true" { return nil }
+                if [".vault", ".vault_decoy", ".k3_quarantine"].contains(url.lastPathComponent) { return nil }
+                return LocalFileItem(
+                    url: url,
+                    name: url.lastPathComponent,
+                    isDirectory: values?.isDirectory == true,
+                    size: Int64(values?.fileSize ?? 0),
+                    modified: values?.contentModificationDate ?? .distantPast
+                )
+            }
+            .sorted {
+                if $0.isDirectory != $1.isDirectory { return $0.isDirectory && !$1.isDirectory }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        } catch {
+            localItems = []
+            statusMessage = "Browse failed: \(error.localizedDescription)"
+        }
+    }
+
+    func goToParentFolder() {
+        let parent = browserURL.deletingLastPathComponent()
+        guard parent.path != browserURL.path else { return }
+        loadLocalBrowser(at: parent)
+    }
+
+    func openLocalItem(_ item: LocalFileItem) {
+        if item.isDirectory {
+            loadLocalBrowser(at: item.url)
+        } else {
+            NSWorkspace.shared.open(item.url)
+        }
+    }
+
+    func encryptLocalSelection(_ item: LocalFileItem?) {
+        guard let item else {
+            statusMessage = "Select a file or folder to put into the vault."
+            return
+        }
+        let urls = item.isDirectory ? scanFiles(at: item.url) : [item.url]
+        guard !urls.isEmpty else {
+            statusMessage = "Selected folder has no files to encrypt."
+            return
+        }
+        encryptIntoVault(files: urls)
+    }
+
+    func decryptVaultSelectionToBrowser(_ item: VaultItem?) {
+        guard let item else {
+            statusMessage = "Select an encrypted file to take out of the vault."
+            return
+        }
+        decrypt(item, to: browserURL)
+        loadLocalBrowser(at: browserURL)
+    }
+
     func createAndEncryptTextNote(title: String, content: String) {
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             statusMessage = "Note title is required."
@@ -150,6 +224,7 @@ final class AppState: ObservableObject {
                 return
             }
             encryptIntoVault(files: files)
+            loadLocalBrowser(at: browserURL)
         } catch {
             statusMessage = "BaoMat encrypt failed: \(error.localizedDescription)"
         }
@@ -461,4 +536,13 @@ struct SecurityRow: Identifiable, Hashable {
     let name: String
     let status: String
     let suggestion: String
+}
+
+struct LocalFileItem: Identifiable, Hashable {
+    let id = UUID()
+    let url: URL
+    let name: String
+    let isDirectory: Bool
+    let size: Int64
+    let modified: Date
 }

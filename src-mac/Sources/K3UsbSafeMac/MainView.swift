@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct MainView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedItem: VaultItem?
+    @State private var selectedLocalItem: LocalFileItem?
     @State private var selectedFinding: ScanFinding?
     @State private var selectedQuarantine: QuarantineItem?
     @State private var selectedTrusted: TrustedFileEntry?
@@ -107,11 +108,8 @@ struct MainView: View {
     }
 
     private var vaultTab: some View {
-        HSplitView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Vault Actions")
-                    .font(.headline)
-                    .padding(.bottom, 4)
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
                 Button { showingImporter = true } label: {
                     Label("Encrypt Files", systemImage: "lock.doc")
                 }
@@ -128,6 +126,7 @@ struct MainView: View {
                     Label("Encrypt BaoMat", systemImage: "folder.badge.lock")
                 }
                 .buttonStyle(.bordered)
+                Spacer()
                 Button { showingDecryptFolder = true } label: {
                     Label("Decrypt Selected", systemImage: "lock.open")
                 }
@@ -136,64 +135,137 @@ struct MainView: View {
                     Label("Refresh Vault", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
-                Divider()
-                MetricTile(title: "Encrypted", value: "\(appState.vaultFiles.count)", icon: "doc.badge.lock", tint: .teal)
-                MetricTile(title: "Quarantine", value: "\(appState.quarantineItems.count)", icon: "shippingbox", tint: .orange)
-                MetricTile(title: "Trusted", value: "\(appState.trustedFiles.count)", icon: "checkmark.seal", tint: .blue)
-                Divider()
-                Label(appState.vaultURL.path, systemImage: "folder")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                Spacer()
             }
-            .padding(16)
-            .frame(minWidth: 240, idealWidth: 280)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
 
-            VStack(alignment: .leading, spacing: 0) {
-                SectionHeader(
-                    title: "Encrypted Files",
-                    subtitle: appState.isDecoyMode ? "Showing files in .vault_decoy" : "Showing files in .vault"
-                )
-                if appState.vaultFiles.isEmpty {
-                    EmptyStateView(
-                        icon: "tray",
-                        title: "Vault is empty",
-                        message: "Choose files to encrypt. They will appear here as .k3enc files compatible with the Windows build.",
-                        primaryTitle: "Encrypt Files",
-                        primaryIcon: "lock.doc"
-                    ) {
-                        showingImporter = true
-                    }
-                    .overlay(alignment: .bottom) {
-                        HStack(spacing: 10) {
-                            Button {
-                                showingNewNote = true
-                            } label: {
-                                Label("Write Note", systemImage: "note.text.badge.plus")
-                            }
-                            Button {
-                                appState.openBaoMatInFinder()
-                            } label: {
-                                Label("Open BaoMat", systemImage: "folder")
-                            }
-                            Button {
-                                appState.encryptBaoMatFiles()
-                            } label: {
-                                Label("Encrypt BaoMat", systemImage: "folder.badge.lock")
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .padding(.bottom, 48)
-                    }
-                } else {
-                    List(appState.vaultFiles, selection: $selectedItem) { item in
-                        VaultRow(item: item)
-                            .tag(item)
-                    }
+            Divider()
+
+            HStack(spacing: 0) {
+                localBrowserPane
+                    .frame(minWidth: 420)
+
+                Divider()
+
+                transferControls
+                    .frame(width: 108)
+
+                Divider()
+
+                vaultBrowserPane
+                    .frame(minWidth: 420)
+            }
+        }
+    }
+
+    private var localBrowserPane: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                SectionHeader(title: "Local Files", subtitle: appState.browserURL.path)
+                Spacer()
+                Button { appState.goToParentFolder() } label: {
+                    Image(systemName: "arrow.up")
+                }
+                .help("Parent folder")
+                Button { appState.loadLocalBrowser(at: appState.baoMatURL) } label: {
+                    Label("BaoMat", systemImage: "folder")
+                }
+                Button { appState.loadLocalBrowser(at: appState.usbRoot) } label: {
+                    Label("Root", systemImage: "externaldrive")
                 }
             }
-            .frame(minWidth: 560)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+
+            if appState.localItems.isEmpty {
+                EmptyStateView(
+                    icon: "folder",
+                    title: "No visible files here",
+                    message: "Open BaoMat, create a note, or choose Encrypt Files from Finder. Folders appear here so you can navigate like the Windows build.",
+                    primaryTitle: "New Note",
+                    primaryIcon: "note.text.badge.plus"
+                ) {
+                    showingNewNote = true
+                }
+            } else {
+                List(appState.localItems, selection: $selectedLocalItem) { item in
+                    LocalFileRow(item: item)
+                        .tag(item)
+                        .onTapGesture(count: 2) {
+                            appState.openLocalItem(item)
+                        }
+                }
+            }
+        }
+    }
+
+    private var transferControls: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            Button {
+                appState.encryptLocalSelection(selectedLocalItem)
+            } label: {
+                VStack(spacing: 6) {
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 24, weight: .bold))
+                    Text("Into Vault")
+                        .font(.caption.bold())
+                }
+                .frame(width: 82, height: 62)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(selectedLocalItem == nil)
+
+            Button {
+                appState.decryptVaultSelectionToBrowser(selectedItem)
+            } label: {
+                VStack(spacing: 6) {
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 24, weight: .bold))
+                    Text("Take Out")
+                        .font(.caption.bold())
+                }
+                .frame(width: 82, height: 62)
+            }
+            .buttonStyle(.bordered)
+            .disabled(selectedItem == nil)
+
+            Divider()
+                .padding(.vertical, 4)
+
+            MetricPill(value: "\(appState.localItems.count)", title: "local")
+            MetricPill(value: "\(appState.vaultFiles.count)", title: "vault")
+            Spacer()
+        }
+        .padding(.vertical, 16)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var vaultBrowserPane: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionHeader(
+                title: "Vault Files",
+                subtitle: appState.isDecoyMode ? ".vault_decoy" : ".vault"
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+
+            if appState.vaultFiles.isEmpty {
+                EmptyStateView(
+                    icon: "tray",
+                    title: "Vault is empty",
+                    message: "Select a file or folder on the left, then press the arrow to put it into the vault.",
+                    primaryTitle: "Write Note",
+                    primaryIcon: "note.text.badge.plus"
+                ) {
+                    showingNewNote = true
+                }
+            } else {
+                List(appState.vaultFiles, selection: $selectedItem) { item in
+                    VaultRow(item: item)
+                        .tag(item)
+                }
+            }
         }
     }
 
@@ -520,6 +592,55 @@ private struct VaultRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct LocalFileRow: View {
+    let item: LocalFileItem
+
+    var body: some View {
+        HStack {
+            Image(systemName: item.isDirectory ? "folder.fill" : "doc")
+                .foregroundStyle(item.isDirectory ? .blue : .secondary)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .lineLimit(1)
+                Text(item.url.path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if item.isDirectory {
+                Text("Folder")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct MetricPill: View {
+    let value: String
+    let title: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.headline)
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: 82)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
