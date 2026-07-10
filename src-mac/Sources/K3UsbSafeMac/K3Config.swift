@@ -18,6 +18,7 @@ struct K3Config: Codable {
     var hideLoginHelp: String
     var autoScanOnLogin: String
     var selfDestructMode: String
+    var k3RuleUpdateURL: String
     var failedLoginCount: Int
     var lockedUntil: Date?
     var needsInitialSetup: Bool = false
@@ -38,6 +39,7 @@ struct K3Config: Codable {
         case hideLoginHelp = "hide_login_help"
         case autoScanOnLogin = "auto_scan_on_login"
         case selfDestructMode = "self_destruct_mode"
+        case k3RuleUpdateURL = "k3_rule_update_url"
         case failedLoginCount = "failed_login_count"
         case lockedUntil = "locked_until"
     }
@@ -58,6 +60,7 @@ struct K3Config: Codable {
         hideLoginHelp: String,
         autoScanOnLogin: String = "false",
         selfDestructMode: String = "wipe_all",
+        k3RuleUpdateURL: String = "",
         failedLoginCount: Int = 0,
         lockedUntil: Date? = nil,
         needsInitialSetup: Bool = false
@@ -77,6 +80,7 @@ struct K3Config: Codable {
         self.hideLoginHelp = hideLoginHelp
         self.autoScanOnLogin = autoScanOnLogin
         self.selfDestructMode = selfDestructMode
+        self.k3RuleUpdateURL = k3RuleUpdateURL
         self.failedLoginCount = failedLoginCount
         self.lockedUntil = lockedUntil
         self.needsInitialSetup = needsInitialSetup
@@ -99,6 +103,7 @@ struct K3Config: Codable {
         hideLoginHelp = try container.decodeIfPresent(String.self, forKey: .hideLoginHelp) ?? "false"
         autoScanOnLogin = try container.decodeIfPresent(String.self, forKey: .autoScanOnLogin) ?? "false"
         selfDestructMode = try container.decodeIfPresent(String.self, forKey: .selfDestructMode) ?? "wipe_all"
+        k3RuleUpdateURL = try container.decodeIfPresent(String.self, forKey: .k3RuleUpdateURL) ?? ""
         failedLoginCount = try container.decodeIfPresent(Int.self, forKey: .failedLoginCount) ?? 0
         lockedUntil = try container.decodeIfPresent(Date.self, forKey: .lockedUntil)
         needsInitialSetup = false
@@ -121,6 +126,7 @@ struct K3Config: Codable {
             hideLoginHelp: "false",
             autoScanOnLogin: "false",
             selfDestructMode: "wipe_all",
+            k3RuleUpdateURL: "",
             needsInitialSetup: true
         )
     }

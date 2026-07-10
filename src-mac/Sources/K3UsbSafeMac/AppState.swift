@@ -524,6 +524,31 @@ final class AppState: ObservableObject {
         }
     }
 
+    func updateK3RulesFromConfiguredURL() {
+        do {
+            let status = try K3MacScanner.updatePortableRules(from: config.k3RuleUpdateURL, root: usbRoot)
+            try? K3IntegrityManager.writeManifest(at: usbRoot)
+            statusMessage = "Da cap nhat K3 rules: \(status)."
+            K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
+            reloadFeatureData()
+        } catch {
+            statusMessage = "Cap nhat K3 rules that bai: \(error.localizedDescription)"
+        }
+    }
+
+    func importK3Rules(files: [URL]) {
+        guard let file = files.first else { return }
+        do {
+            let status = try K3MacScanner.importPortableRules(from: file, root: usbRoot)
+            try? K3IntegrityManager.writeManifest(at: usbRoot)
+            statusMessage = "Da nhap K3 rules: \(status)."
+            K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
+            reloadFeatureData()
+        } catch {
+            statusMessage = "Nhap K3 rules that bai: \(error.localizedDescription)"
+        }
+    }
+
     func quarantine(_ finding: ScanFinding) {
         do {
             try K3QuarantineManager.quarantine(finding.url, virusName: finding.signature, root: usbRoot)
@@ -678,7 +703,8 @@ final class AppState: ObservableObject {
         wipeHistory: Bool,
         wipeMacos: Bool,
         autoScanOnLogin: Bool,
-        selfDestructMode: String
+        selfDestructMode: String,
+        k3RuleUpdateURL: String
     ) {
         do {
             config.loginTitle = loginTitle.isEmpty ? "USB An Toan K3" : loginTitle
@@ -692,6 +718,7 @@ final class AppState: ObservableObject {
             config.wipeMacos = wipeMacos ? "true" : "false"
             config.autoScanOnLogin = autoScanOnLogin ? "true" : "false"
             config.selfDestructMode = selfDestructMode
+            config.k3RuleUpdateURL = k3RuleUpdateURL.trimmingCharacters(in: .whitespacesAndNewlines)
             try K3ConfigStore.save(config, at: usbRoot)
             statusMessage = "Da luu cai dat."
             K3HistoryManager.append("INFO", statusMessage, root: usbRoot)

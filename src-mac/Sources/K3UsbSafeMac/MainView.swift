@@ -12,6 +12,7 @@ struct MainView: View {
     @State private var showingImporter = false
     @State private var showingDecryptFolder = false
     @State private var showingTrustImporter = false
+    @State private var showingRuleImporter = false
     @State private var showingNewNote = false
 
     var body: some View {
@@ -55,6 +56,11 @@ struct MainView: View {
         .fileImporter(isPresented: $showingTrustImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
                 appState.trust(files: urls)
+            }
+        }
+        .fileImporter(isPresented: $showingRuleImporter, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
+            if case .success(let urls) = result {
+                appState.importK3Rules(files: urls)
             }
         }
         .sheet(isPresented: $showingNewNote) {
@@ -397,6 +403,17 @@ struct MainView: View {
                     Label("Xuat bao cao", systemImage: "doc.richtext")
                 }
                 .disabled(appState.scanFindings.isEmpty)
+                Button {
+                    appState.updateK3RulesFromConfiguredURL()
+                } label: {
+                    Label("Cap nhat K3 rules", systemImage: "arrow.down.doc")
+                }
+                .disabled(appState.config.k3RuleUpdateURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button {
+                    showingRuleImporter = true
+                } label: {
+                    Label("Nhap rules", systemImage: "doc.badge.plus")
+                }
             }
             HStack(spacing: 10) {
                 Button { appState.scanCurrentFolder() } label: {
@@ -948,6 +965,7 @@ private struct SettingsPane: View {
     @State private var wipeMacos = true
     @State private var autoScanOnLogin = false
     @State private var selfDestructMode = "wipe_all"
+    @State private var k3RuleUpdateURL = ""
 
     var body: some View {
         Form {
@@ -987,6 +1005,21 @@ private struct SettingsPane: View {
                 Toggle("Don metadata macOS khi thoat", isOn: $wipeMacos)
             }
 
+            Section("Cap nhat rules") {
+                TextField("URL k3-rules.json", text: $k3RuleUpdateURL)
+                HStack {
+                    Button {
+                        appState.updateK3RulesFromConfiguredURL()
+                    } label: {
+                        Label("Cap nhat K3 rules", systemImage: "arrow.down.doc")
+                    }
+                    .disabled(k3RuleUpdateURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Text("Luu cai dat truoc khi cap nhat tu URL moi.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Bao mat dang nhap") {
                 Toggle("Tu dong quet USB sau khi dang nhap", isOn: $autoScanOnLogin)
                 Picker("Nhap sai 10 lan", selection: $selfDestructMode) {
@@ -1012,7 +1045,8 @@ private struct SettingsPane: View {
                     wipeHistory: wipeHistory,
                     wipeMacos: wipeMacos,
                     autoScanOnLogin: autoScanOnLogin,
-                    selfDestructMode: selfDestructMode
+                    selfDestructMode: selfDestructMode,
+                    k3RuleUpdateURL: k3RuleUpdateURL
                 )
             } label: {
                 Label("Luu cai dat", systemImage: "square.and.arrow.down")
@@ -1030,6 +1064,7 @@ private struct SettingsPane: View {
             wipeMacos = appState.config.wipeMacos == "true"
             autoScanOnLogin = appState.config.autoScanOnLogin == "true"
             selfDestructMode = appState.config.selfDestructMode
+            k3RuleUpdateURL = appState.config.k3RuleUpdateURL
         }
     }
 }

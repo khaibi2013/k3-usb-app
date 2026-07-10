@@ -107,6 +107,45 @@ enum K3MacScanner {
         return output.isEmpty ? "Da cap nhat CSDL ClamAV." : output
     }
 
+    static func updatePortableRules(from urlString: String, root: URL) throws -> String {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else {
+            throw K3Error.userFacing("URL cap nhat K3 rules khong hop le.")
+        }
+        let data = try Data(contentsOf: url)
+        try installPortableRules(data: data, root: root)
+        return portableRulesStatus(root: root)
+    }
+
+    static func importPortableRules(from file: URL, root: URL) throws -> String {
+        let didAccess = file.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess {
+                file.stopAccessingSecurityScopedResource()
+            }
+        }
+        let data = try Data(contentsOf: file)
+        try installPortableRules(data: data, root: root)
+        return portableRulesStatus(root: root)
+    }
+
+    static func installPortableRules(data: Data, root: URL) throws {
+        guard data.count <= 2 * 1024 * 1024 else {
+            throw K3Error.userFacing("File K3 rules qua lon.")
+        }
+        let rules = try JSONDecoder().decode(PortableRuleSet.self, from: data)
+        guard rules.version > 0 else {
+            throw K3Error.userFacing("K3 rules thieu version hop le.")
+        }
+        guard !rules.nameRules.isEmpty || !rules.contentRules.isEmpty else {
+            throw K3Error.userFacing("K3 rules khong co rule nao.")
+        }
+        ensurePortableLayout(at: root)
+        let url = portableRuleURL(root: root)
+        try data.write(to: url, options: .atomic)
+        try? MacSystemTools.hide(root.appendingPathComponent("tools", isDirectory: true))
+    }
+
     static func portableRulesStatus(root: URL) -> String {
         ensurePortableLayout(at: root)
         guard let rules = loadPortableRules(root: root) else { return "Chua co rule portable" }

@@ -52,8 +52,32 @@ private struct IntegrityManifestFile: Codable {
 }
 
 enum K3IntegrityManager {
+    static let trackedPaths = [
+        "AnToanUSB.exe",
+        "K3 Mac.app/Contents/Info.plist",
+        "K3 Mac.app/Contents/MacOS/K3UsbSafeMac",
+        "tools/rules/k3-rules.json"
+    ]
+
     static func manifestURL(at root: URL) -> URL {
         root.appendingPathComponent(".k3_integrity_manifest.json")
+    }
+
+    static func writeManifest(at root: URL) throws {
+        let files = trackedPaths.compactMap { path -> IntegrityManifestFile? in
+            let url = root.appendingPathComponent(path)
+            guard FileManager.default.fileExists(atPath: url.path),
+                  let hash = K3TrustedFileManager.sha256(url) else { return nil }
+            let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            return IntegrityManifestFile(path: path, sha256: hash, size: size)
+        }
+        let manifest = IntegrityManifest(version: 1, generatedAt: timestamp(), files: files)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let url = manifestURL(at: root)
+        MacSystemTools.clearHidden(url)
+        try encoder.encode(manifest).write(to: url, options: .atomic)
+        try? MacSystemTools.hide(url)
     }
 
     static func verify(at root: URL) -> IntegrityCheckResult {
