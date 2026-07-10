@@ -29,7 +29,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 - [x] Restore quarantine to original path.
 - [x] Trust from quarantine.
 - [x] K3 rule updater from URL/file.
-- [ ] Scan report export HTML/PDF.
+- [x] Scan report export HTML/PDF.
 
 ## Phase 4 - Commercialization
 

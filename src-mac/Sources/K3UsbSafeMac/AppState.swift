@@ -520,6 +520,22 @@ final class AppState: ObservableObject {
         }
     }
 
+    func exportScanReportPDF() {
+        guard !scanFindings.isEmpty else {
+            statusMessage = "Chua co ket qua quet de xuat bao cao."
+            return
+        }
+        do {
+            let report = try K3ScanReportManager.writePDFReport(findings: scanFindings, root: usbRoot)
+            statusMessage = "Da xuat PDF: \(report.lastPathComponent)"
+            K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
+            refreshHistory()
+            NSWorkspace.shared.open(report)
+        } catch {
+            statusMessage = "Xuat PDF that bai: \(error.localizedDescription)"
+        }
+    }
+
     func applyUsbVaccine() {
         do {
             let result = try K3UsbVaccine.apply(at: usbRoot)

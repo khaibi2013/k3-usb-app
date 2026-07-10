@@ -172,6 +172,10 @@ struct MainView: View {
                     Label("Xuat bao cao HTML", systemImage: "doc.richtext")
                 }
                 .disabled(appState.scanFindings.isEmpty)
+                Button { appState.exportScanReportPDF() } label: {
+                    Label("Xuat PDF", systemImage: "doc.text")
+                }
+                .disabled(appState.scanFindings.isEmpty)
                 Button { appState.applyUsbVaccine() } label: {
                     Label("USB vaccine", systemImage: "syringe")
                 }
@@ -427,7 +431,13 @@ struct MainView: View {
                 Button {
                     appState.exportScanReport()
                 } label: {
-                    Label("Xuat bao cao", systemImage: "doc.richtext")
+                    Label("Xuat HTML", systemImage: "doc.richtext")
+                }
+                .disabled(appState.scanFindings.isEmpty)
+                Button {
+                    appState.exportScanReportPDF()
+                } label: {
+                    Label("Xuat PDF", systemImage: "doc.text")
                 }
                 .disabled(appState.scanFindings.isEmpty)
                 Button {

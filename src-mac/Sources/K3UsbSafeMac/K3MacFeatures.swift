@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Security
+import AppKit
 
 struct TrustedFileEntry: Identifiable, Hashable {
     let id: String
@@ -360,6 +361,89 @@ enum K3ScanReportManager {
         """
 
         try html.write(to: reportURL, atomically: true, encoding: .utf8)
+        try MacSystemTools.hide(reportDir)
+        return reportURL
+    }
+
+    static func writePDFReport(findings: [ScanFinding], root: URL) throws -> URL {
+        let reportDir = reportRoot(at: root)
+        try FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
+        let reportURL = reportDir.appendingPathComponent("scan-report-\(fileTimestamp()).pdf")
+        let threats = findings.filter { $0.status == "Threat" }.count
+        let trusted = findings.filter { $0.status == "Trusted" }.count
+        let clean = findings.filter { $0.status == "Clean" }.count
+        let machine = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+
+        var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
+        guard let context = CGContext(reportURL as CFURL, mediaBox: &mediaBox, nil) else {
+            throw K3Error.userFacing("Khong tao duoc PDF report.")
+        }
+
+        let titleFont = NSFont.boldSystemFont(ofSize: 18)
+        let headingFont = NSFont.boldSystemFont(ofSize: 11)
+        let bodyFont = NSFont.systemFont(ofSize: 9)
+        let monoFont = NSFont.monospacedSystemFont(ofSize: 8, weight: .regular)
+        var y: CGFloat = 34
+
+        func beginPage() {
+            context.beginPDFPage(nil)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+            y = 34
+        }
+
+        func endPage() {
+            NSGraphicsContext.restoreGraphicsState()
+            context.endPDFPage()
+        }
+
+        func draw(_ text: String, x: CGFloat, width: CGFloat, font: NSFont, color: NSColor = .labelColor, height: CGFloat = 18) {
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineBreakMode = .byTruncatingTail
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: color,
+                .paragraphStyle: paragraph
+            ]
+            (text as NSString).draw(in: CGRect(x: x, y: y, width: width, height: height), withAttributes: attrs)
+        }
+
+        func nextPageIfNeeded(_ rowHeight: CGFloat = 30) {
+            if y + rowHeight > 760 {
+                endPage()
+                beginPage()
+            }
+        }
+
+        beginPage()
+        draw("USB An Toan K3 - Bao cao quet virus", x: 34, width: 540, font: titleFont, height: 24)
+        y += 28
+        draw("Thoi gian: \(timestamp())", x: 34, width: 540, font: bodyFont)
+        y += 14
+        draw("May quet: \(machine)", x: 34, width: 540, font: bodyFont)
+        y += 14
+        draw("USB: \(root.path)", x: 34, width: 540, font: monoFont)
+        y += 28
+        draw("Tong file: \(findings.count)    Nguy hiem: \(threats)    Tin cay: \(trusted)    Sach: \(clean)", x: 34, width: 540, font: headingFont)
+        y += 28
+        draw("Ten file", x: 34, width: 130, font: headingFont)
+        draw("Trang thai", x: 172, width: 70, font: headingFont)
+        draw("Chu ky", x: 250, width: 130, font: headingFont)
+        draw("Duong dan", x: 386, width: 190, font: headingFont)
+        y += 18
+
+        for finding in findings {
+            nextPageIfNeeded()
+            let color: NSColor = finding.status == "Threat" ? .systemRed : finding.status == "Trusted" ? .systemBlue : .systemGreen
+            draw(finding.url.lastPathComponent, x: 34, width: 130, font: bodyFont)
+            draw(statusText(finding.status), x: 172, width: 70, font: bodyFont, color: color)
+            draw(finding.signature, x: 250, width: 130, font: bodyFont)
+            draw(finding.url.path, x: 386, width: 190, font: monoFont)
+            y += 22
+        }
+
+        endPage()
+        context.closePDF()
         try MacSystemTools.hide(reportDir)
         return reportURL
     }
