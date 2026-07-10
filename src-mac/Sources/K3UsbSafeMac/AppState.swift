@@ -271,12 +271,11 @@ final class AppState: ObservableObject {
             statusMessage = "Hay chon file hoac thu muc de dua vao ket."
             return
         }
-        let urls = item.isDirectory ? scanFiles(at: item.url) : [item.url]
-        guard !urls.isEmpty else {
-            statusMessage = "Thu muc da chon khong co file de ma hoa."
-            return
+        if item.isDirectory {
+            encryptFolderIntoVault(folder: item.url, removeOriginal: true)
+        } else {
+            encryptIntoVault(files: [item.url], removeOriginal: true)
         }
-        encryptIntoVault(files: urls, removeOriginal: true)
     }
 
     func decryptVaultSelectionToBrowser(_ item: VaultItem?) {
@@ -325,6 +324,51 @@ final class AppState: ObservableObject {
             loadLocalBrowser(at: browserURL)
         } catch {
             statusMessage = "Ma hoa BaoMat that bai: \(error.localizedDescription)"
+        }
+    }
+
+    private func encryptFolderIntoVault(folder: URL, removeOriginal: Bool) {
+        guard let crypto else { return }
+        do {
+            let didAccessFolder = folder.startAccessingSecurityScopedResource()
+            defer {
+                if didAccessFolder {
+                    folder.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            let files = scanFiles(at: folder).filter { $0.pathExtension.lowercased() != "k3enc" }
+            guard !files.isEmpty else {
+                statusMessage = "Thu muc da chon khong co file de ma hoa."
+                return
+            }
+
+            var encryptedCount = 0
+            for file in files {
+                let storedName = try K3Vault.storedName(for: file, inside: folder, includeRootFolder: true)
+                if !K3TrustedFileManager.isTrusted(file, root: usbRoot) {
+                    let scan = K3MacScanner.scan(file, root: usbRoot)
+                    if scan.isThreat {
+                        statusMessage = "Da chan: \(storedName) - \(scan.name)"
+                        scanFindings.append(ScanFinding(url: file, status: "Threat", signature: scan.name))
+                        K3HistoryManager.append("WARN", statusMessage, root: usbRoot)
+                        continue
+                    }
+                }
+                try K3Vault.encrypt(file: file, into: vaultURL, crypto: crypto, storedName: storedName)
+                encryptedCount += 1
+                K3HistoryManager.append("INFO", "Da ma hoa \(storedName)", root: usbRoot)
+            }
+
+            if removeOriginal, encryptedCount == files.count {
+                try? K3Maintenance.secureShredDirectory(folder)
+            }
+            refreshVault()
+            loadLocalBrowser(at: browserURL)
+            refreshHistory()
+            statusMessage = "Da ma hoa \(encryptedCount)/\(files.count) file trong thu muc."
+        } catch {
+            statusMessage = "Ma hoa thu muc that bai: \(error.localizedDescription)"
         }
     }
 

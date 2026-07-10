@@ -14,14 +14,15 @@ final class K3Crypto {
         macKey = Data(material.dropFirst(32).prefix(32))
     }
 
-    func encrypt(file source: URL, to destination: URL) throws {
+    func encrypt(file source: URL, to destination: URL, storedName: String? = nil) throws {
         let original = try Data(contentsOf: source)
         let shouldCompress = original.count > 1024 && !Self.isMedia(source.pathExtension)
         let payloadData = shouldCompress ? try Self.gzip(original) : original
         let iv = K3PasswordHasher.randomBytes(count: 16)
         let encrypted = try Self.aesCBC(data: payloadData, key: key, iv: iv, operation: CCOperation(kCCEncrypt))
 
-        let nameData = Data(source.lastPathComponent.utf8)
+        let safeName = try Self.safeRelativeName(storedName ?? source.lastPathComponent)
+        let nameData = Data(safeName.utf8)
         var payload = Data()
         payload.append(UInt8(shouldCompress ? 1 : 0))
         payload.append(Self.littleEndianInt32(nameData.count))
@@ -35,7 +36,11 @@ final class K3Crypto {
     func decrypt(file source: URL, to outputFolder: URL) throws -> URL {
         let decoded = try decode(file: source)
 
-        let output = outputFolder.appendingPathComponent(decoded.fileName)
+        let output = try Self.safeOutputURL(for: decoded.fileName, in: outputFolder)
+        let parent = output.deletingLastPathComponent()
+        if !FileManager.default.fileExists(atPath: parent.path) {
+            try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        }
         try decoded.data.write(to: output, options: .atomic)
         return output
     }
@@ -46,6 +51,39 @@ final class K3Crypto {
 
     private static func isMedia(_ ext: String) -> Bool {
         ["mp4", "zip", "jpg", "jpeg", "png", "mp3", "rar"].contains(ext.lowercased())
+    }
+
+    private static func safeRelativeName(_ value: String) throws -> String {
+        let normalized = value.replacingOccurrences(of: "\\", with: "/")
+        guard !normalized.hasPrefix("/") else {
+            throw K3Error.userFacing("Invalid file name in encrypted metadata.")
+        }
+        let parts = normalized.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard !parts.isEmpty else {
+            throw K3Error.userFacing("Invalid file name in encrypted metadata.")
+        }
+        for part in parts {
+            if part.isEmpty || part == "." || part == ".." {
+                throw K3Error.userFacing("Invalid file name in encrypted metadata.")
+            }
+        }
+        return parts.joined(separator: "/")
+    }
+
+    private static func safeOutputURL(for storedName: String, in outputFolder: URL) throws -> URL {
+        let relativeName = try safeRelativeName(storedName)
+        var output = outputFolder
+        for component in relativeName.split(separator: "/").map(String.init) {
+            output.appendPathComponent(component)
+        }
+
+        let basePath = outputFolder.standardizedFileURL.path
+        let outputPath = output.standardizedFileURL.path
+        let prefix = basePath.hasSuffix("/") ? basePath : basePath + "/"
+        guard outputPath == basePath || outputPath.hasPrefix(prefix) else {
+            throw K3Error.userFacing("Encrypted file tried to write outside output folder.")
+        }
+        return output
     }
 
     private func decode(file source: URL) throws -> (fileName: String, data: Data) {
@@ -68,7 +106,7 @@ final class K3Crypto {
         guard nameLength >= 0, offset + nameLength <= payload.count else { throw K3Error.userFacing("Invalid metadata.") }
 
         let nameData = payload.subdata(in: offset..<(offset + nameLength))
-        let fileName = String(data: nameData, encoding: .utf8) ?? "decrypted-file"
+        let fileName = try Self.safeRelativeName(String(data: nameData, encoding: .utf8) ?? "decrypted-file")
         offset += nameLength
         let encrypted = payload.subdata(in: offset..<payload.count)
         var decrypted = try Self.aesCBC(data: encrypted, key: key, iv: iv, operation: CCOperation(kCCDecrypt))

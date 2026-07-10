@@ -466,6 +466,20 @@ enum K3Maintenance {
         }
     }
 
+    static func secureShredDirectory(_ folder: URL) throws {
+        guard FileManager.default.fileExists(atPath: folder.path) else { return }
+        if let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey], options: []) {
+            for case let url as URL in enumerator {
+                if (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                    try? secureShredFile(url)
+                }
+            }
+        }
+        if FileManager.default.fileExists(atPath: folder.path) {
+            try FileManager.default.removeItem(at: folder)
+        }
+    }
+
     static func cleanupMacMetadata(at root: URL) throws -> Int {
         var removed = 0
         let keys: [URLResourceKey] = [.isRegularFileKey]

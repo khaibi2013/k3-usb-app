@@ -282,7 +282,9 @@ namespace AnToanUSB
                 }
             }
 
-            File.WriteAllBytes(Path.Combine(destDir, fileName), decryptedData);
+            string customDestFile = SafeDestinationPath(destDir, fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(customDestFile));
+            File.WriteAllBytes(customDestFile, decryptedData);
         }
 
         public static void DecryptFile(string sourceFile, string destDir)
@@ -352,8 +354,30 @@ namespace AnToanUSB
                 }
             }
 
-            string destFile = Path.Combine(destDir, fileName);
+            string destFile = SafeDestinationPath(destDir, fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(destFile));
             File.WriteAllBytes(destFile, decryptedData);
+        }
+
+        private static string SafeDestinationPath(string destDir, string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) throw new Exception("Invalid file name.");
+            string normalizedName = fileName.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+            if (Path.IsPathRooted(normalizedName)) throw new Exception("Invalid file name.");
+
+            string[] parts = normalizedName.Split(Path.DirectorySeparatorChar);
+            foreach (string part in parts)
+            {
+                if (string.IsNullOrEmpty(part) || part == "." || part == "..")
+                    throw new Exception("Invalid file name.");
+            }
+
+            string basePath = Path.GetFullPath(destDir);
+            string destPath = Path.GetFullPath(Path.Combine(basePath, normalizedName));
+            string prefix = basePath.EndsWith(Path.DirectorySeparatorChar.ToString()) ? basePath : basePath + Path.DirectorySeparatorChar;
+            if (!destPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !string.Equals(destPath, basePath, StringComparison.OrdinalIgnoreCase))
+                throw new Exception("Encrypted file tried to write outside output folder.");
+            return destPath;
         }
 
         public static void VerifyEncryptedFile(string sourceFile)

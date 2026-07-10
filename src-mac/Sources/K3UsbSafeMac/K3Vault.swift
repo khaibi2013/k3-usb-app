@@ -24,7 +24,7 @@ enum K3Vault {
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
-    static func encrypt(file: URL, into vault: URL, crypto: K3Crypto) throws {
+    static func encrypt(file: URL, into vault: URL, crypto: K3Crypto, storedName: String? = nil) throws {
         if !FileManager.default.fileExists(atPath: vault.path) {
             try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
         }
@@ -35,8 +35,9 @@ enum K3Vault {
             }
         }
 
-        let destination = availableURL(for: vault.appendingPathComponent(file.lastPathComponent + ".k3enc"))
-        try crypto.encrypt(file: file, to: destination)
+        let archiveName = flatArchiveName(for: storedName ?? file.lastPathComponent)
+        let destination = availableURL(for: vault.appendingPathComponent(archiveName + ".k3enc"))
+        try crypto.encrypt(file: file, to: destination, storedName: storedName)
         try MacSystemTools.hide(vault)
     }
 
@@ -54,6 +55,18 @@ enum K3Vault {
         _ = try crypto.decrypt(file: file, to: folder)
     }
 
+    static func storedName(for file: URL, inside folder: URL, includeRootFolder: Bool = true) throws -> String {
+        let folderPath = folder.standardizedFileURL.path
+        let filePath = file.standardizedFileURL.path
+        let prefix = folderPath.hasSuffix("/") ? folderPath : folderPath + "/"
+        guard filePath.hasPrefix(prefix) else {
+            throw K3Error.userFacing("File khong nam trong thu muc da chon.")
+        }
+        let relative = String(filePath.dropFirst(prefix.count))
+        let safeRelative = try safeRelativePath(relative)
+        return includeRootFolder ? try safeRelativePath(folder.lastPathComponent + "/" + safeRelative) : safeRelative
+    }
+
     private static func availableURL(for url: URL) -> URL {
         if !FileManager.default.fileExists(atPath: url.path) { return url }
         let directory = url.deletingLastPathComponent()
@@ -65,5 +78,26 @@ enum K3Vault {
             if !FileManager.default.fileExists(atPath: candidate.path) { return candidate }
             index += 1
         }
+    }
+
+    private static func flatArchiveName(for storedName: String) -> String {
+        storedName
+            .replacingOccurrences(of: "\\", with: "/")
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .joined(separator: "__")
+            .replacingOccurrences(of: ":", with: "_")
+    }
+
+    private static func safeRelativePath(_ value: String) throws -> String {
+        let normalized = value.replacingOccurrences(of: "\\", with: "/")
+        guard !normalized.hasPrefix("/") else { throw K3Error.userFacing("Ten thu muc khong hop le.") }
+        let parts = normalized.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard !parts.isEmpty else { throw K3Error.userFacing("Ten thu muc khong hop le.") }
+        for part in parts {
+            if part.isEmpty || part == "." || part == ".." {
+                throw K3Error.userFacing("Ten thu muc khong hop le.")
+            }
+        }
+        return parts.joined(separator: "/")
     }
 }
