@@ -38,7 +38,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 - [ ] Branding package per customer.
 - [x] Version/changelog screen.
 - [ ] Windows and macOS release builder.
-- [ ] QA release report.
+- [x] QA release report.
 
 ## Phase 5 - UX And Localization
 

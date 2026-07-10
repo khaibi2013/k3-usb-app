@@ -130,6 +130,7 @@ README
 
   mkdir -p "$target/.vault" "$target/.vault_decoy" "$target/BaoMat"
   write_integrity_manifest "$target"
+  write_release_report "$target"
   chflags hidden "$target/.k3_integrity_manifest.json" 2>/dev/null || true
 }
 
@@ -164,6 +165,47 @@ write_integrity_manifest() {
     printf '\n  ]\n'
     printf '}\n'
   } > "$manifest"
+}
+
+write_release_report() {
+  local target="$1"
+  local report="$target/K3_RELEASE_REPORT.txt"
+  local app_bin="$target/K3 Mac.app/Contents/MacOS/K3UsbSafeMac"
+  local rules="$target/tools/rules/k3-rules.json"
+  local clam="$target/tools/mac-arm64/clamav/clamscan"
+  local freshclam="$target/tools/mac-arm64/clamav/freshclam"
+  local clam_db="$target/tools/mac-arm64/clamav/database/main.cvd"
+
+  {
+    printf 'USB An Toan K3 - Release Report\n'
+    printf 'Generated: %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    printf 'Target: %s\n\n' "$target"
+    printf '[macOS]\n'
+    if [ -f "$app_bin" ]; then
+      printf 'K3 Mac.app: OK (%s bytes)\n' "$(stat -f %z "$app_bin")"
+      printf 'K3 Mac SHA-256: %s\n' "$(shasum -a 256 "$app_bin" | awk '{print $1}')"
+    else
+      printf 'K3 Mac.app: MISSING\n'
+    fi
+    printf '\n[Rules]\n'
+    if [ -f "$rules" ]; then
+      printf 'k3-rules.json: OK (%s bytes)\n' "$(stat -f %z "$rules")"
+    else
+      printf 'k3-rules.json: MISSING\n'
+    fi
+    printf '\n[ClamAV portable]\n'
+    [ -f "$clam" ] && printf 'clamscan: OK\n' || printf 'clamscan: MISSING\n'
+    [ -f "$freshclam" ] && printf 'freshclam: OK\n' || printf 'freshclam: MISSING\n'
+    [ -f "$clam_db" ] && printf 'database/main.cvd: OK (%s bytes)\n' "$(stat -f %z "$clam_db")" || printf 'database/main.cvd: MISSING\n'
+    printf '\n[Integrity]\n'
+    if [ -f "$target/.k3_integrity_manifest.json" ]; then
+      printf '.k3_integrity_manifest.json: OK\n'
+    else
+      printf '.k3_integrity_manifest.json: MISSING\n'
+    fi
+    printf '\n[Data safety]\n'
+    printf 'Vault/config data was not deleted by this script.\n'
+  } > "$report"
 }
 
 echo "==> Preparing dist: $DIST_DIR"
