@@ -66,10 +66,17 @@ final class AppState: ObservableObject {
         }
     }
 
-    func setupPassword(realPassword: String, decoyPassword: String) throws {
+    func setupPassword(
+        realPassword: String,
+        decoyPassword: String,
+        autoScanOnLogin: Bool = false,
+        selfDestructMode: String = "wipe_all"
+    ) throws {
         config.realHash = try K3PasswordHasher.hash(realPassword)
         config.decoyHash = decoyPassword.isEmpty ? "" : try K3PasswordHasher.hash(decoyPassword)
         config.cryptoSalt = K3PasswordHasher.randomSaltBase64()
+        config.autoScanOnLogin = autoScanOnLogin ? "true" : "false"
+        config.selfDestructMode = selfDestructMode
         config.failedLoginCount = 0
         config.lockedUntil = nil
         config.needsInitialSetup = false

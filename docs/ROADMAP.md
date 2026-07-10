@@ -42,7 +42,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 
 ## Phase 5 - UX And Localization
 
-- [ ] First-run wizard.
+- [x] First-run wizard.
 - [ ] Drag and drop encrypt/decrypt.
 - [ ] Vietnamese and English localization.
 - [ ] Friendlier empty states and warnings.
