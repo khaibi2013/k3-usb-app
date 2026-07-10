@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -10,8 +11,6 @@ struct MainView: View {
     @State private var selectedTrusted: TrustedFileEntry?
     @State private var showingImporter = false
     @State private var showingDecryptFolder = false
-    @State private var showingScanFolderImporter = false
-    @State private var showingScanFileImporter = false
     @State private var showingTrustImporter = false
     @State private var showingNewNote = false
 
@@ -49,16 +48,6 @@ struct MainView: View {
         .fileImporter(isPresented: $showingDecryptFolder, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
             if case .success(let urls) = result, let item = selectedItem, let folder = urls.first {
                 appState.decrypt(item, to: folder)
-            }
-        }
-        .fileImporter(isPresented: $showingScanFolderImporter, allowedContentTypes: [.folder], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result {
-                appState.scan(urls: urls)
-            }
-        }
-        .fileImporter(isPresented: $showingScanFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result {
-                appState.scan(urls: urls)
             }
         }
         .fileImporter(isPresented: $showingTrustImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
@@ -325,12 +314,12 @@ struct MainView: View {
                 Divider()
                     .frame(height: 24)
                 Button {
-                    showingScanFolderImporter = true
+                    chooseScanFolders()
                 } label: {
                     Label("Chon thu muc", systemImage: "folder.badge.gearshape")
                 }
                 Button {
-                    showingScanFileImporter = true
+                    chooseScanFiles()
                 } label: {
                     Label("Chon file", systemImage: "doc.text.magnifyingglass")
                 }
@@ -376,6 +365,38 @@ struct MainView: View {
             }
         }
         .padding(16)
+    }
+
+    private func chooseScanFolders() {
+        let panel = NSOpenPanel()
+        panel.title = "Chon thu muc de quet"
+        panel.prompt = "Quet"
+        panel.message = "Chon mot hoac nhieu thu muc de quet virus."
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = false
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { response in
+            guard response == .OK, !panel.urls.isEmpty else { return }
+            appState.scan(urls: panel.urls)
+        }
+    }
+
+    private func chooseScanFiles() {
+        let panel = NSOpenPanel()
+        panel.title = "Chon file de quet"
+        panel.prompt = "Quet"
+        panel.message = "Chon mot hoac nhieu file de quet virus."
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = false
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { response in
+            guard response == .OK, !panel.urls.isEmpty else { return }
+            appState.scan(urls: panel.urls)
+        }
     }
 
     private var quarantineTab: some View {
