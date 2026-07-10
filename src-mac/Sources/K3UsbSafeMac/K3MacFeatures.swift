@@ -336,6 +336,47 @@ enum K3Maintenance {
     }
 }
 
+enum K3DataWiper {
+    static func wipeSensitiveData(at root: URL) throws {
+        let targets = [
+            ".vault",
+            ".vault_decoy",
+            "BaoMat",
+            ".k3_quarantine",
+            ".k3_recovery_snapshots",
+            ".k3_trusted_hashes.txt",
+            ".k3_history.log",
+            ".vault_config.json"
+        ]
+
+        for name in targets {
+            try wipe(root.appendingPathComponent(name))
+        }
+    }
+
+    private static func wipe(_ url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
+
+        if values?.isDirectory == true {
+            if let children = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey], options: []) {
+                for child in children {
+                    try wipe(child)
+                }
+            }
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+
+        if values?.isRegularFile == true {
+            try? K3Maintenance.secureShredFile(url)
+        }
+        if FileManager.default.fileExists(atPath: url.path) {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+}
+
 private func timestamp() -> String {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"

@@ -168,21 +168,39 @@ namespace AnToanUSB
                 if (ConfigManager.VerifyPassword(pwd))
                 {
                     CryptoEngine.Authenticate(pwd);
+                    failedAttempts = 0;
                     CompleteSuccessfulLogin();
                 }
                 else
                 {
                     SetConnectionStatus(false);
                     failedAttempts++;
-                    if (failedAttempts >= 20)
+                    if (failedAttempts >= 10)
                     {
-                        MessageBox.Show("CẢNH BÁO: Bạn đã nhập sai 20 lần! Hệ thống đang tự hủy toàn bộ dữ liệu an toàn...", "Bảo mật", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show("CẢNH BÁO: Bạn đã nhập sai 10 lần! Hệ thống đang tự hủy toàn bộ dữ liệu an toàn...", "Bảo mật", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         SelfDestructVault();
                         Application.Exit();
                     }
+                    else if (failedAttempts >= 5)
+                    {
+                        btnLogin.Enabled = false;
+                        txtPassword.Enabled = false;
+                        MessageBox.Show(string.Format("Bạn đã nhập sai {0} lần. Đăng nhập bị khóa 5 phút. Còn {1} lần sai trước khi xóa dữ liệu.", failedAttempts, 10 - failedAttempts), "Bảo mật", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        System.Windows.Forms.Timer unlockTimer = new System.Windows.Forms.Timer();
+                        unlockTimer.Interval = 5 * 60 * 1000;
+                        unlockTimer.Tick += (s, e) =>
+                        {
+                            unlockTimer.Stop();
+                            unlockTimer.Dispose();
+                            btnLogin.Enabled = true;
+                            txtPassword.Enabled = true;
+                            txtPassword.Focus();
+                        };
+                        unlockTimer.Start();
+                    }
                     else
                     {
-                        MessageBox.Show(string.Format("Mật khẩu không đúng! Bạn còn {0} lần thử.", 20 - failedAttempts), "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show(string.Format("Mật khẩu không đúng! Còn {0} lần sai trước khi khóa 5 phút.", 5 - failedAttempts), "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 }
             }
@@ -277,16 +295,38 @@ namespace AnToanUSB
 
         private void SelfDestructVault()
         {
-            string vault1 = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".vault");
-            string vault2 = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".vault_decoy");
-            if (System.IO.Directory.Exists(vault1)) {
-                foreach (var f in System.IO.Directory.GetFiles(vault1, "*", System.IO.SearchOption.AllDirectories)) CryptoEngine.SecureShredFile(f);
-                System.IO.Directory.Delete(vault1, true);
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string[] targets = {
+                ".vault",
+                ".vault_decoy",
+                "BaoMat",
+                ".k3_quarantine",
+                ".k3_recovery_snapshots",
+                ".k3_trusted_hashes.txt",
+                ".k3_history.log",
+                ".vault_config.json"
+            };
+
+            foreach (string target in targets)
+                SecureDeletePath(System.IO.Path.Combine(baseDir, target));
+        }
+
+        private void SecureDeletePath(string path)
+        {
+            if (System.IO.File.Exists(path))
+            {
+                try { CryptoEngine.SecureShredFile(path); }
+                catch { try { System.IO.File.Delete(path); } catch { } }
+                return;
             }
-            if (System.IO.Directory.Exists(vault2)) {
-                foreach (var f in System.IO.Directory.GetFiles(vault2, "*", System.IO.SearchOption.AllDirectories)) CryptoEngine.SecureShredFile(f);
-                System.IO.Directory.Delete(vault2, true);
+
+            if (!System.IO.Directory.Exists(path)) return;
+            foreach (var file in System.IO.Directory.GetFiles(path, "*", System.IO.SearchOption.AllDirectories))
+            {
+                try { CryptoEngine.SecureShredFile(file); }
+                catch { try { System.IO.File.Delete(file); } catch { } }
             }
+            try { System.IO.Directory.Delete(path, true); } catch { }
         }
     }
 }

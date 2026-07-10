@@ -16,6 +16,8 @@ struct K3Config: Codable {
     var loginTitle: String
     var loginHelp: String
     var hideLoginHelp: String
+    var failedLoginCount: Int
+    var lockedUntil: Date?
     var needsInitialSetup: Bool = false
 
     enum CodingKeys: String, CodingKey {
@@ -32,6 +34,64 @@ struct K3Config: Codable {
         case loginTitle = "login_title"
         case loginHelp = "login_help"
         case hideLoginHelp = "hide_login_help"
+        case failedLoginCount = "failed_login_count"
+        case lockedUntil = "locked_until"
+    }
+
+    init(
+        hwid: String,
+        realHash: String,
+        decoyHash: String,
+        cryptoSalt: String,
+        autoEncryptFolder: String,
+        maxSizeBytes: String,
+        autoDecrypt: String,
+        showHidden: String,
+        wipeHistory: String,
+        wipeMacos: String,
+        loginTitle: String,
+        loginHelp: String,
+        hideLoginHelp: String,
+        failedLoginCount: Int = 0,
+        lockedUntil: Date? = nil,
+        needsInitialSetup: Bool = false
+    ) {
+        self.hwid = hwid
+        self.realHash = realHash
+        self.decoyHash = decoyHash
+        self.cryptoSalt = cryptoSalt
+        self.autoEncryptFolder = autoEncryptFolder
+        self.maxSizeBytes = maxSizeBytes
+        self.autoDecrypt = autoDecrypt
+        self.showHidden = showHidden
+        self.wipeHistory = wipeHistory
+        self.wipeMacos = wipeMacos
+        self.loginTitle = loginTitle
+        self.loginHelp = loginHelp
+        self.hideLoginHelp = hideLoginHelp
+        self.failedLoginCount = failedLoginCount
+        self.lockedUntil = lockedUntil
+        self.needsInitialSetup = needsInitialSetup
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        hwid = try container.decodeIfPresent(String.self, forKey: .hwid) ?? ""
+        realHash = try container.decodeIfPresent(String.self, forKey: .realHash) ?? ""
+        decoyHash = try container.decodeIfPresent(String.self, forKey: .decoyHash) ?? ""
+        cryptoSalt = try container.decodeIfPresent(String.self, forKey: .cryptoSalt) ?? ""
+        autoEncryptFolder = try container.decodeIfPresent(String.self, forKey: .autoEncryptFolder) ?? "BaoMat"
+        maxSizeBytes = try container.decodeIfPresent(String.self, forKey: .maxSizeBytes) ?? "\(2 * 1024 * 1024 * 1024)"
+        autoDecrypt = try container.decodeIfPresent(String.self, forKey: .autoDecrypt) ?? "false"
+        showHidden = try container.decodeIfPresent(String.self, forKey: .showHidden) ?? "false"
+        wipeHistory = try container.decodeIfPresent(String.self, forKey: .wipeHistory) ?? "false"
+        wipeMacos = try container.decodeIfPresent(String.self, forKey: .wipeMacos) ?? "true"
+        loginTitle = try container.decodeIfPresent(String.self, forKey: .loginTitle) ?? "USB An Toan K3"
+        loginHelp = try container.decodeIfPresent(String.self, forKey: .loginHelp) ?? "Tro giup HELP!"
+        hideLoginHelp = try container.decodeIfPresent(String.self, forKey: .hideLoginHelp) ?? "false"
+        failedLoginCount = try container.decodeIfPresent(Int.self, forKey: .failedLoginCount) ?? 0
+        lockedUntil = try container.decodeIfPresent(Date.self, forKey: .lockedUntil)
+        needsInitialSetup = false
     }
 
     static func defaultConfig() -> K3Config {

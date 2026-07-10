@@ -68,6 +68,8 @@ final class AppState: ObservableObject {
         config.realHash = try K3PasswordHasher.hash(realPassword)
         config.decoyHash = decoyPassword.isEmpty ? "" : try K3PasswordHasher.hash(decoyPassword)
         config.cryptoSalt = K3PasswordHasher.randomSaltBase64()
+        config.failedLoginCount = 0
+        config.lockedUntil = nil
         config.needsInitialSetup = false
         try K3ConfigStore.save(config, at: usbRoot)
         try login(password: realPassword)
@@ -75,14 +77,28 @@ final class AppState: ObservableObject {
     }
 
     func login(password: String) throws {
+        if let lockedUntil = config.lockedUntil, lockedUntil > Date() {
+            let seconds = max(1, Int(ceil(lockedUntil.timeIntervalSinceNow)))
+            let minutes = max(1, Int(ceil(Double(seconds) / 60.0)))
+            throw K3Error.userFacing("Da khoa dang nhap. Thu lai sau \(minutes) phut.")
+        }
+        if let lockedUntil = config.lockedUntil, lockedUntil <= Date() {
+            config.lockedUntil = nil
+            try? K3ConfigStore.save(config, at: usbRoot)
+        }
+
         if K3PasswordHasher.verify(password, stored: config.decoyHash) {
             isDecoyMode = true
         } else if K3PasswordHasher.verify(password, stored: config.realHash) {
             isDecoyMode = false
         } else {
-            throw K3Error.userFacing("Sai mat khau.")
+            try registerFailedLogin()
+            return
         }
 
+        config.failedLoginCount = 0
+        config.lockedUntil = nil
+        try K3ConfigStore.save(config, at: usbRoot)
         crypto = try K3Crypto(password: password, cryptoSaltBase64: config.cryptoSalt)
         isAuthenticated = true
         statusMessage = "Da ket noi"
@@ -91,6 +107,31 @@ final class AppState: ObservableObject {
         reloadFeatureData()
         loadLocalBrowser(at: browserURL)
         startAutoEncryptWatcher()
+    }
+
+    private func registerFailedLogin() throws {
+        config.failedLoginCount += 1
+        let failed = config.failedLoginCount
+
+        if failed >= 10 {
+            K3HistoryManager.append("CRITICAL", "Nhap sai mat khau 10 lan. Dang xoa du lieu bao mat.", root: usbRoot)
+            try K3DataWiper.wipeSensitiveData(at: usbRoot)
+            config = K3Config.defaultConfig()
+            statusMessage = "Da xoa du lieu sau 10 lan sai mat khau."
+            throw K3Error.userFacing("Sai mat khau 10 lan. Du lieu bao mat da bi xoa.")
+        }
+
+        if failed >= 5 {
+            let until = Date().addingTimeInterval(5 * 60)
+            config.lockedUntil = until
+            try K3ConfigStore.save(config, at: usbRoot)
+            let remaining = 10 - failed
+            throw K3Error.userFacing("Sai mat khau \(failed) lan. Da khoa 5 phut. Con \(remaining) lan truoc khi xoa du lieu.")
+        }
+
+        try K3ConfigStore.save(config, at: usbRoot)
+        let remainingToLock = 5 - failed
+        throw K3Error.userFacing("Sai mat khau. Con \(remainingToLock) lan truoc khi khoa 5 phut.")
     }
 
     func logout() {
