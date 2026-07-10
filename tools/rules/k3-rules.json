@@ -19,6 +19,11 @@
       "any": ["EICAR-STANDARD-ANTIVIRUS-TEST-FILE"]
     },
     {
+      "id": "K3.Win.ApiInjection",
+      "maxBytes": 2097152,
+      "all": ["CreateRemoteThread", "VirtualAllocEx"]
+    },
+    {
       "id": "K3.Script.EncodedPowerShell",
       "extensions": ["bat", "cmd", "ps1", "vbs", "js", "hta", "txt"],
       "maxBytes": 2097152,

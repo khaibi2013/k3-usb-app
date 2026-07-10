@@ -145,6 +145,8 @@ enum K3MacScanner {
         guard !text.isEmpty else { return nil }
 
         let scriptRules: [(String, String)] = [
+            ("createremotethread", "K3.Win.ApiInjection"),
+            ("virtualallocex", "K3.Win.ApiInjection"),
             ("powershell", "K3.Script.PowerShell"),
             ("encodedcommand", "K3.Script.EncodedPowerShell"),
             ("frombase64string", "K3.Script.Base64Payload"),
@@ -161,6 +163,9 @@ enum K3MacScanner {
         ]
 
         let matches = scriptRules.filter { text.contains($0.0) }.map(\.1)
+        if matches.filter({ $0 == "K3.Win.ApiInjection" }).count >= 2 {
+            return "K3.Win.ApiInjection"
+        }
         if matches.contains("K3.Script.Downloader"), text.contains("| sh") || text.contains("| bash") {
             return "K3.Script.DownloadAndExecute"
         }
@@ -310,6 +315,11 @@ enum K3MacScanner {
               "id": "K3.Test.EICAR",
               "maxBytes": 2097152,
               "any": ["EICAR-STANDARD-ANTIVIRUS-TEST-FILE"]
+            },
+            {
+              "id": "K3.Win.ApiInjection",
+              "maxBytes": 2097152,
+              "all": ["CreateRemoteThread", "VirtualAllocEx"]
             },
             {
               "id": "K3.Script.EncodedPowerShell",

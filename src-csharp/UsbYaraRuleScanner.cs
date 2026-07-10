@@ -19,6 +19,11 @@ namespace AnToanUSB
                 if (LooksLikeUsbFolderImpersonator(lowerName, ext))
                     return "YARA.USB.FolderImpersonator";
 
+                string binaryText = Normalize(ReadBinaryTextSample(filePath));
+                if (ContainsAny(binaryText, "createremotethread") &&
+                    ContainsAny(binaryText, "virtualallocex"))
+                    return "YARA.Win.ApiInjection";
+
                 if (ext == ".inf" && lowerName == "autorun.inf")
                 {
                     string text = ReadTextSample(filePath);
