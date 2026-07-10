@@ -336,7 +336,10 @@ final class AppState: ObservableObject {
                 try? K3HistoryManager.clear(at: usbRoot)
             }
             logout()
-            try MacSystemTools.ejectVolume(at: usbRoot)
+            try MacSystemTools.ejectVolumeAfterAppTerminates(at: usbRoot)
+            DispatchQueue.main.async {
+                NSApp.terminate(nil)
+            }
         } catch {
             statusMessage = "Day USB/ISO ra that bai: \(error.localizedDescription)"
         }

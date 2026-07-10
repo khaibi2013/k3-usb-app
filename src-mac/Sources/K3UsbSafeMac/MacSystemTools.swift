@@ -15,6 +15,26 @@ enum MacSystemTools {
         _ = try run("/usr/sbin/diskutil", ["eject", root.path])
     }
 
+    static func ejectVolumeAfterAppTerminates(at root: URL) throws {
+        let scriptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("k3-eject-\(UUID().uuidString).zsh")
+        let script = """
+        #!/bin/zsh
+        sleep 1
+        /usr/sbin/diskutil eject "\(root.path.replacingOccurrences(of: "\"", with: "\\\""))"
+        rm -f "$0"
+        """
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = [scriptURL.path]
+        process.standardOutput = nil
+        process.standardError = nil
+        try process.run()
+    }
+
     static func run(_ executable: String, _ arguments: [String]) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
