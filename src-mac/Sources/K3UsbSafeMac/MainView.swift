@@ -304,6 +304,14 @@ struct MainView: View {
             HStack {
                 SectionHeader(title: "Antivirus", subtitle: "Scan with K3 USB heuristics and ClamAV when available")
                 Spacer()
+                Label(appState.antivirusEngineInfo.clamAvailable ? "ClamAV ready" : "ClamAV not found", systemImage: appState.antivirusEngineInfo.clamAvailable ? "checkmark.shield" : "exclamationmark.triangle")
+                    .foregroundStyle(appState.antivirusEngineInfo.clamAvailable ? .green : .orange)
+                Button {
+                    appState.updateClamAVDatabase()
+                } label: {
+                    Label("Update DB", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(!appState.antivirusEngineInfo.freshClamAvailable)
                 Button {
                     scanAllowsDirectories = true
                     showingScanImporter = true
@@ -529,7 +537,7 @@ struct MainView: View {
             Text(appState.statusMessage)
                 .font(.caption)
             Spacer()
-            Text("\(appState.vaultFiles.count) encrypted | \(appState.quarantineItems.count) quarantined | \(appState.trustedFiles.count) trusted")
+            Text("\(appState.vaultFiles.count) encrypted | \(appState.quarantineItems.count) quarantined | \(appState.trustedFiles.count) trusted | auto \(appState.autoEncryptActive ? "on" : "off")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

@@ -42,10 +42,15 @@ src-mac/.build/release/K3UsbSafeMac
 - Decrypt selected `.k3enc` files to an output folder.
 - Security Center with portable layout status and vault integrity verification.
 - Antivirus scan UI using K3 USB heuristics plus optional ClamAV if `clamscan` exists.
+- YARA-like built-in script/content rules for USB malware patterns, EICAR test detection, downloader scripts, macOS persistence hints, and Office/media decoy names.
+- ClamAV database update button when `freshclam` exists.
 - Quarantine manager with restore and permanent delete.
+- Secure shred for quarantined deletes and auto-encrypted source cleanup.
+- Recovery snapshots before antivirus scans in `.k3_recovery_snapshots`.
 - Trusted files UI backed by `.k3_trusted_hashes.txt` SHA-256 entries.
 - History log for K3 app actions on macOS.
 - Settings UI for passwords, login text, and portable behavior flags.
+- Auto-encrypt watcher for `BaoMat` or the whole USB root while logged in.
 - macOS maintenance tools for metadata cleanup, layout repair, and `diskutil verifyVolume`.
 - Hide K3 support folders/files with `chflags hidden`.
 - Eject the current USB volume with `diskutil eject`.

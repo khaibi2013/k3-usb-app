@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Security
 
 struct TrustedFileEntry: Identifiable, Hashable {
     let id: String
@@ -133,7 +134,7 @@ enum K3QuarantineManager {
     }
 
     static func delete(_ item: QuarantineItem) throws {
-        try? FileManager.default.removeItem(at: item.quarantinedURL)
+        try? K3Maintenance.secureShredFile(item.quarantinedURL)
         try? FileManager.default.removeItem(at: item.metadataURL)
     }
 
@@ -164,6 +165,68 @@ struct ScanFinding: Identifiable, Hashable {
     let url: URL
     let status: String
     let signature: String
+}
+
+struct RecoverySnapshotResult: Hashable {
+    let snapshotURL: URL
+    let itemCount: Int
+    let fileCount: Int
+    let bytes: Int64
+}
+
+enum K3RecoverySnapshotManager {
+    static func snapshotRoot(at root: URL) -> URL {
+        root.appendingPathComponent(".k3_recovery_snapshots", isDirectory: true)
+    }
+
+    static func createSnapshot(for urls: [URL], root: URL) throws -> RecoverySnapshotResult? {
+        let files = urls.flatMap(snapshotFiles)
+        guard !files.isEmpty else { return nil }
+
+        let snapshotURL = snapshotRoot(at: root).appendingPathComponent(snapshotName(), isDirectory: true)
+        try FileManager.default.createDirectory(at: snapshotURL, withIntermediateDirectories: true)
+        var copied = 0
+        var bytes: Int64 = 0
+
+        for file in files {
+            let relative = relativePath(for: file, root: root)
+            let destination = snapshotURL.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.copyItem(at: file, to: destination)
+                copied += 1
+                bytes += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            }
+        }
+        try MacSystemTools.hide(snapshotRoot(at: root))
+        return RecoverySnapshotResult(snapshotURL: snapshotURL, itemCount: urls.count, fileCount: copied, bytes: bytes)
+    }
+
+    private static func snapshotFiles(_ url: URL) -> [URL] {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return [] }
+        if !isDirectory.boolValue { return [url] }
+        guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) else { return [] }
+        return enumerator.compactMap { item in
+            guard let file = item as? URL,
+                  (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { return nil }
+            return file
+        }
+    }
+
+    private static func relativePath(for file: URL, root: URL) -> String {
+        let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        if file.path.hasPrefix(rootPath) {
+            return String(file.path.dropFirst(rootPath.count))
+        }
+        return file.lastPathComponent
+    }
+
+    private static func snapshotName() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter.string(from: Date())
+    }
 }
 
 struct HistoryEntry: Identifiable, Hashable {
@@ -209,6 +272,42 @@ enum K3HistoryManager {
 }
 
 enum K3Maintenance {
+    static func secureShredFile(_ file: URL) throws {
+        guard FileManager.default.fileExists(atPath: file.path) else { return }
+        let size = Int64((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        if size > 0, let handle = try? FileHandle(forUpdating: file) {
+            defer { try? handle.close() }
+            let blockSize = 1024 * 1024
+            let patterns: [UInt8?] = [0x00, 0xff, nil]
+            for pattern in patterns {
+                try handle.seek(toOffset: 0)
+                var remaining = size
+                while remaining > 0 {
+                    let count = min(blockSize, Int(remaining))
+                    let data: Data
+                    if let byte = pattern {
+                        data = Data(repeating: byte, count: count)
+                    } else {
+                        var random = Data(repeating: 0, count: count)
+                        _ = random.withUnsafeMutableBytes {
+                            SecRandomCopyBytes(kSecRandomDefault, count, $0.baseAddress!)
+                        }
+                        data = random
+                    }
+                    try handle.write(contentsOf: data)
+                    remaining -= Int64(count)
+                }
+                try handle.synchronize()
+            }
+        }
+        let renamed = file.deletingLastPathComponent().appendingPathComponent(UUID().uuidString + ".tmp")
+        try? FileManager.default.moveItem(at: file, to: renamed)
+        try? FileManager.default.removeItem(at: renamed)
+        if FileManager.default.fileExists(atPath: file.path) {
+            try FileManager.default.removeItem(at: file)
+        }
+    }
+
     static func cleanupMacMetadata(at root: URL) throws -> Int {
         var removed = 0
         let keys: [URLResourceKey] = [.isRegularFileKey]
@@ -231,6 +330,7 @@ enum K3Maintenance {
         try K3PortableLayout.ensure(at: root)
         try K3PortableLayout.hideSupportFiles(at: root)
         try MacSystemTools.hide(K3QuarantineManager.quarantineDir(at: root))
+        try MacSystemTools.hide(K3RecoverySnapshotManager.snapshotRoot(at: root))
         try MacSystemTools.hide(K3TrustedFileManager.trustedFileURL(at: root))
         try MacSystemTools.hide(K3HistoryManager.url(at: root))
     }

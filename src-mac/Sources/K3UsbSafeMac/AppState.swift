@@ -16,8 +16,12 @@ final class AppState: ObservableObject {
     @Published var securityRows: [SecurityRow] = []
     @Published var browserURL: URL
     @Published var localItems: [LocalFileItem] = []
+    @Published var antivirusEngineInfo = K3MacScanner.engineInfo()
+    @Published var autoEncryptActive = false
 
     private var crypto: K3Crypto?
+    private var autoEncryptTimer: Timer?
+    private var autoEncryptSeen: Set<String> = []
 
     init() {
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
@@ -65,10 +69,12 @@ final class AppState: ObservableObject {
         refreshVault()
         reloadFeatureData()
         loadLocalBrowser(at: browserURL)
+        startAutoEncryptWatcher()
     }
 
     func logout() {
         K3HistoryManager.append("INFO", "Logged out", root: usbRoot)
+        stopAutoEncryptWatcher()
         crypto = nil
         isAuthenticated = false
         isDecoyMode = false
@@ -94,13 +100,16 @@ final class AppState: ObservableObject {
         }
     }
 
-    func encryptIntoVault(files: [URL]) {
+    func encryptIntoVault(files: [URL], removeOriginal: Bool = false) {
         guard let crypto else { return }
         do {
+            var encryptedCount = 0
             for file in files {
                 if K3TrustedFileManager.isTrusted(file, root: usbRoot) {
                     K3HistoryManager.append("INFO", "Trusted file skipped by scanner: \(file.lastPathComponent)", root: usbRoot)
                     try K3Vault.encrypt(file: file, into: vaultURL, crypto: crypto)
+                    if removeOriginal { try? K3Maintenance.secureShredFile(file) }
+                    encryptedCount += 1
                     continue
                 }
                 let scan = K3MacScanner.scan(file)
@@ -111,11 +120,14 @@ final class AppState: ObservableObject {
                     continue
                 }
                 try K3Vault.encrypt(file: file, into: vaultURL, crypto: crypto)
+                if removeOriginal { try? K3Maintenance.secureShredFile(file) }
+                encryptedCount += 1
                 K3HistoryManager.append("INFO", "Encrypted \(file.lastPathComponent)", root: usbRoot)
             }
             refreshVault()
+            loadLocalBrowser(at: browserURL)
             refreshHistory()
-            statusMessage = "Encrypted \(files.count) item(s)."
+            statusMessage = "Encrypted \(encryptedCount) item(s)."
         } catch {
             statusMessage = "Encrypt failed: \(error.localizedDescription)"
         }
@@ -178,7 +190,7 @@ final class AppState: ObservableObject {
             statusMessage = "Selected folder has no files to encrypt."
             return
         }
-        encryptIntoVault(files: urls)
+        encryptIntoVault(files: urls, removeOriginal: true)
     }
 
     func decryptVaultSelectionToBrowser(_ item: VaultItem?) {
@@ -223,7 +235,7 @@ final class AppState: ObservableObject {
                 statusMessage = "BaoMat has no files to encrypt."
                 return
             }
-            encryptIntoVault(files: files)
+            encryptIntoVault(files: files, removeOriginal: true)
             loadLocalBrowser(at: browserURL)
         } catch {
             statusMessage = "BaoMat encrypt failed: \(error.localizedDescription)"
@@ -269,6 +281,7 @@ final class AppState: ObservableObject {
     }
 
     func reloadFeatureData() {
+        antivirusEngineInfo = K3MacScanner.engineInfo()
         refreshTrustedFiles()
         refreshQuarantine()
         refreshHistory()
@@ -277,6 +290,9 @@ final class AppState: ObservableObject {
 
     func scan(urls: [URL]) {
         var findings: [ScanFinding] = []
+        if let snapshot = try? K3RecoverySnapshotManager.createSnapshot(for: urls, root: usbRoot) {
+            K3HistoryManager.append("INFO", "Created recovery snapshot: \(snapshot.fileCount) file(s), \(snapshot.bytes / 1024) KB", root: usbRoot)
+        }
         for url in urls {
             let didAccess = url.startAccessingSecurityScopedResource()
             defer {
@@ -297,6 +313,20 @@ final class AppState: ObservableObject {
         statusMessage = "Scan complete: \(threats) threat(s), \(findings.count) file(s)."
         K3HistoryManager.append(threats == 0 ? "INFO" : "WARN", statusMessage, root: usbRoot)
         refreshHistory()
+    }
+
+    func updateClamAVDatabase() {
+        do {
+            let output = try K3MacScanner.updateClamAVDatabase()
+            statusMessage = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? "ClamAV database updated."
+            K3HistoryManager.append("INFO", "ClamAV database update completed", root: usbRoot)
+            antivirusEngineInfo = K3MacScanner.engineInfo()
+            refreshHistory()
+        } catch {
+            statusMessage = "ClamAV update failed: \(error.localizedDescription)"
+            K3HistoryManager.append("WARN", statusMessage, root: usbRoot)
+            refreshHistory()
+        }
     }
 
     func quarantine(_ finding: ScanFinding) {
@@ -453,6 +483,7 @@ final class AppState: ObservableObject {
             statusMessage = "Settings saved."
             K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
             reloadFeatureData()
+            startAutoEncryptWatcher()
         } catch {
             statusMessage = "Settings save failed: \(error.localizedDescription)"
         }
@@ -489,6 +520,42 @@ final class AppState: ObservableObject {
         }
     }
 
+    func startAutoEncryptWatcher() {
+        stopAutoEncryptWatcher()
+        guard isAuthenticated, !config.autoEncryptFolder.isEmpty else {
+            autoEncryptActive = false
+            return
+        }
+        let watchURL = config.autoEncryptFolder == "Toan bo USB" || config.autoEncryptFolder == "Toàn bộ USB" ? usbRoot : baoMatURL
+        try? FileManager.default.createDirectory(at: watchURL, withIntermediateDirectories: true)
+        autoEncryptSeen = Set(scanFiles(at: watchURL).map(\.path))
+        autoEncryptActive = true
+        autoEncryptTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            self?.processAutoEncryptTick(watchURL: watchURL)
+        }
+    }
+
+    func stopAutoEncryptWatcher() {
+        autoEncryptTimer?.invalidate()
+        autoEncryptTimer = nil
+        autoEncryptActive = false
+    }
+
+    private func processAutoEncryptTick(watchURL: URL) {
+        guard isAuthenticated else {
+            stopAutoEncryptWatcher()
+            return
+        }
+        let candidates = scanFiles(at: watchURL)
+            .filter { !$0.pathExtension.lowercased().elementsEqual("k3enc") }
+            .filter { !$0.path.contains("/.vault/") && !$0.path.contains("/.vault_decoy/") && !$0.path.contains("/.k3_quarantine/") }
+        let newFiles = candidates.filter { autoEncryptSeen.insert($0.path).inserted }
+        guard !newFiles.isEmpty else { return }
+        encryptIntoVault(files: newFiles, removeOriginal: true)
+        K3HistoryManager.append("INFO", "Auto-encrypted \(newFiles.count) new file(s)", root: usbRoot)
+        refreshHistory()
+    }
+
     private func reloadSecurityRows() {
         let configURL = K3ConfigStore.configURL(at: usbRoot)
         let realVault = usbRoot.appendingPathComponent(".vault", isDirectory: true)
@@ -501,6 +568,9 @@ final class AppState: ObservableObject {
             SecurityRow(name: "Security config", status: exists(configURL) ? "Ready" : "Missing", suggestion: ".vault_config.json"),
             SecurityRow(name: "Trusted hashes", status: "\(trustedFiles.count) item(s)", suggestion: ".k3_trusted_hashes.txt"),
             SecurityRow(name: "Quarantine", status: "\(quarantineItems.count) item(s)", suggestion: ".k3_quarantine"),
+            SecurityRow(name: "Recovery snapshots", status: exists(K3RecoverySnapshotManager.snapshotRoot(at: usbRoot)) ? "Enabled" : "No snapshots", suggestion: ".k3_recovery_snapshots"),
+            SecurityRow(name: "Auto encrypt", status: autoEncryptActive ? "Watching" : "Off", suggestion: config.autoEncryptFolder.isEmpty ? "Disabled in settings" : config.autoEncryptFolder),
+            SecurityRow(name: "ClamAV", status: antivirusEngineInfo.clamAvailable ? "Available" : "Not found", suggestion: antivirusEngineInfo.clamScanPath ?? "Install ClamAV for signature scans"),
             SecurityRow(name: "Encrypted files", status: "\(vaultFiles.count) item(s)", suggestion: isDecoyMode ? "Decoy mode" : "Real vault")
         ]
     }
