@@ -24,10 +24,30 @@ final class AppState: ObservableObject {
     private var autoEncryptSeen: Set<String> = []
 
     init() {
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-        self.usbRoot = cwd
-        self.browserURL = cwd
+        let root = Self.detectUsbRoot()
+        self.usbRoot = root
+        self.browserURL = root
         self.config = K3Config.defaultConfig()
+    }
+
+    private static func detectUsbRoot() -> URL {
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let bundleURL = Bundle.main.bundleURL
+
+        if bundleURL.pathExtension == "app" {
+            let parent = bundleURL.deletingLastPathComponent()
+            if parent.path.hasPrefix("/Volumes/") {
+                return parent
+            }
+        }
+
+        let executableURL = URL(fileURLWithPath: CommandLine.arguments.first ?? "")
+        let executableParent = executableURL.deletingLastPathComponent()
+        if executableParent.lastPathComponent == "mac", executableParent.deletingLastPathComponent().path.hasPrefix("/Volumes/") {
+            return executableParent.deletingLastPathComponent()
+        }
+
+        return cwd
     }
 
     func bootstrap() {
