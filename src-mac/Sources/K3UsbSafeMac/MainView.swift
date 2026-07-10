@@ -1142,6 +1142,27 @@ private struct SettingsPane: View {
                     .foregroundStyle(.red)
             }
 
+            Section("Chong clone USB") {
+                Text(appState.config.macHwid.isEmpty ? "Chua gan USB voi may macOS." : appState.isMacCloneWarning ? "Canh bao: USB nay khong khop dinh danh da gan." : "USB dang khop dinh danh macOS.")
+                    .foregroundStyle(appState.isMacCloneWarning ? .red : .secondary)
+                Text(appState.currentMacHwid)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                HStack {
+                    Button {
+                        appState.bindMacHwid()
+                    } label: {
+                        Label("Gan USB nay", systemImage: "link")
+                    }
+                    Button(role: .destructive) {
+                        appState.clearMacHwid()
+                    } label: {
+                        Label("Bo gan", systemImage: "link.badge.minus")
+                    }
+                    .disabled(appState.config.macHwid.isEmpty)
+                }
+            }
+
             Button {
                 appState.saveSettings(
                     loginTitle: loginTitle,

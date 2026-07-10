@@ -77,6 +77,7 @@ final class AppState: ObservableObject {
         config.cryptoSalt = K3PasswordHasher.randomSaltBase64()
         config.autoScanOnLogin = autoScanOnLogin ? "true" : "false"
         config.selfDestructMode = selfDestructMode
+        config.macHwid = MacSystemTools.volumeIdentifier(at: usbRoot)
         config.failedLoginCount = 0
         config.lockedUntil = nil
         config.needsInitialSetup = false
@@ -463,6 +464,9 @@ final class AppState: ObservableObject {
         if integrity.manifestExists && integrity.hasWarning {
             statusMessage = "Canh bao: app/rules/tools tren USB co the da bi sua."
         }
+        if isMacCloneWarning {
+            statusMessage = "Canh bao: USB khong khop ma dinh danh macOS da gan."
+        }
     }
 
     func scan(urls: [URL], createSnapshot: Bool = true) {
@@ -799,6 +803,38 @@ final class AppState: ObservableObject {
         }
     }
 
+    var currentMacHwid: String {
+        MacSystemTools.volumeIdentifier(at: usbRoot)
+    }
+
+    var isMacCloneWarning: Bool {
+        !config.macHwid.isEmpty && config.macHwid != currentMacHwid
+    }
+
+    func bindMacHwid() {
+        do {
+            config.macHwid = currentMacHwid
+            try K3ConfigStore.save(config, at: usbRoot)
+            statusMessage = "Da gan USB voi dinh danh macOS hien tai."
+            K3HistoryManager.append("WARN", statusMessage, root: usbRoot)
+            reloadFeatureData()
+        } catch {
+            statusMessage = "Gan USB that bai: \(error.localizedDescription)"
+        }
+    }
+
+    func clearMacHwid() {
+        do {
+            config.macHwid = ""
+            try K3ConfigStore.save(config, at: usbRoot)
+            statusMessage = "Da bo gan dinh danh macOS."
+            K3HistoryManager.append("WARN", statusMessage, root: usbRoot)
+            reloadFeatureData()
+        } catch {
+            statusMessage = "Bo gan USB that bai: \(error.localizedDescription)"
+        }
+    }
+
     func startAutoEncryptWatcher() {
         stopAutoEncryptWatcher()
         guard isAuthenticated, !config.autoEncryptFolder.isEmpty else {
@@ -847,6 +883,7 @@ final class AppState: ObservableObject {
             SecurityRow(name: "Thu muc BaoMat", status: exists(baoMat) ? "San sang" : "Thieu", suggestion: "Noi staging tu dong ma hoa"),
             SecurityRow(name: "Cau hinh bao mat", status: exists(configURL) ? "San sang" : "Thieu", suggestion: ".vault_config.json"),
             SecurityRow(name: "Toan ven USB", status: integrity.status, suggestion: integrity.detail),
+            SecurityRow(name: "Chong clone macOS", status: config.macHwid.isEmpty ? "Chua gan" : isMacCloneWarning ? "Canh bao" : "Dung USB", suggestion: config.macHwid.isEmpty ? "Gan trong Cai dat" : currentMacHwid),
             SecurityRow(name: "File tin cay", status: "\(trustedFiles.count) muc", suggestion: ".k3_trusted_hashes.txt"),
             SecurityRow(name: "Khu cach ly", status: "\(quarantineItems.count) muc", suggestion: ".k3_quarantine"),
             SecurityRow(name: "Snapshot phuc hoi", status: exists(K3RecoverySnapshotManager.snapshotRoot(at: usbRoot)) ? "Da bat" : "Chua co", suggestion: ".k3_recovery_snapshots"),

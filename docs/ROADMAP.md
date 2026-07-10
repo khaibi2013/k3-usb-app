@@ -34,7 +34,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 ## Phase 4 - Commercialization
 
 - [ ] License bound to USB serial.
-- [ ] Clone detection warning.
+- [x] Clone detection warning.
 - [ ] Branding package per customer.
 - [ ] Version/changelog screen.
 - [ ] Windows and macOS release builder.

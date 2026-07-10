@@ -4,6 +4,7 @@ import Security
 
 struct K3Config: Codable {
     var hwid: String
+    var macHwid: String
     var realHash: String
     var decoyHash: String
     var cryptoSalt: String
@@ -25,6 +26,7 @@ struct K3Config: Codable {
 
     enum CodingKeys: String, CodingKey {
         case hwid
+        case macHwid = "mac_hwid"
         case realHash = "real_hash"
         case decoyHash = "decoy_hash"
         case cryptoSalt = "crypto_salt"
@@ -46,6 +48,7 @@ struct K3Config: Codable {
 
     init(
         hwid: String,
+        macHwid: String = "",
         realHash: String,
         decoyHash: String,
         cryptoSalt: String,
@@ -66,6 +69,7 @@ struct K3Config: Codable {
         needsInitialSetup: Bool = false
     ) {
         self.hwid = hwid
+        self.macHwid = macHwid
         self.realHash = realHash
         self.decoyHash = decoyHash
         self.cryptoSalt = cryptoSalt
@@ -89,6 +93,7 @@ struct K3Config: Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         hwid = try container.decodeIfPresent(String.self, forKey: .hwid) ?? ""
+        macHwid = try container.decodeIfPresent(String.self, forKey: .macHwid) ?? ""
         realHash = try container.decodeIfPresent(String.self, forKey: .realHash) ?? ""
         decoyHash = try container.decodeIfPresent(String.self, forKey: .decoyHash) ?? ""
         cryptoSalt = try container.decodeIfPresent(String.self, forKey: .cryptoSalt) ?? ""
@@ -112,6 +117,7 @@ struct K3Config: Codable {
     static func defaultConfig() -> K3Config {
         K3Config(
             hwid: "",
+            macHwid: "",
             realHash: "",
             decoyHash: "",
             cryptoSalt: K3PasswordHasher.randomSaltBase64(),

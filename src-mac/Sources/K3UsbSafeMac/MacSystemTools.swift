@@ -35,6 +35,26 @@ enum MacSystemTools {
         try process.run()
     }
 
+    static func volumeIdentifier(at root: URL) -> String {
+        guard let output = try? run("/usr/sbin/diskutil", ["info", root.path]) else {
+            return "path:\(root.path)"
+        }
+        for line in output.split(whereSeparator: \.isNewline) {
+            let text = String(line)
+            if text.contains("Volume UUID:"),
+               let value = text.split(separator: ":", maxSplits: 1).last?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return "mac-volume:\(value)"
+            }
+            if text.contains("Disk / Partition UUID:"),
+               let value = text.split(separator: ":", maxSplits: 1).last?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return "mac-partition:\(value)"
+            }
+        }
+        return "path:\(root.path)"
+    }
+
     static func run(_ executable: String, _ arguments: [String]) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
