@@ -38,6 +38,7 @@ struct MainView: View {
             Divider()
             statusBar
         }
+        .background(Color(nsColor: .windowBackgroundColor))
         .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
                 appState.encryptIntoVault(files: urls)
@@ -63,12 +64,17 @@ struct MainView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            Image(systemName: appState.isDecoyMode ? "theatermasks" : "lock.shield")
-                .font(.system(size: 28))
-                .foregroundStyle(appState.isDecoyMode ? .orange : .teal)
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(appState.isDecoyMode ? Color.orange.opacity(0.15) : Color.teal.opacity(0.15))
+                Image(systemName: appState.isDecoyMode ? "theatermasks.fill" : "lock.shield.fill")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(appState.isDecoyMode ? .orange : .teal)
+            }
+            .frame(width: 46, height: 46)
             VStack(alignment: .leading, spacing: 2) {
                 Text(appState.isDecoyMode ? "Decoy Vault" : "USB An Toan K3")
-                    .font(.headline)
+                    .font(.title3.bold())
                 Text(appState.usbRoot.path)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -81,21 +87,29 @@ struct MainView: View {
             } label: {
                 Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
             }
+            .buttonStyle(.bordered)
             Button(role: .destructive) {
                 appState.ejectUsb()
             } label: {
                 Label("Lock & Eject", systemImage: "eject")
             }
+            .buttonStyle(.borderedProminent)
         }
-        .padding(12)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private var vaultTab: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 12) {
+                Text("Vault Actions")
+                    .font(.headline)
+                    .padding(.bottom, 4)
                 Button { showingImporter = true } label: {
                     Label("Encrypt Files", systemImage: "lock.doc")
                 }
+                .buttonStyle(.borderedProminent)
                 Button { showingDecryptFolder = true } label: {
                     Label("Decrypt Selected", systemImage: "lock.open")
                 }
@@ -103,6 +117,11 @@ struct MainView: View {
                 Button { appState.refreshVault() } label: {
                     Label("Refresh Vault", systemImage: "arrow.clockwise")
                 }
+                .buttonStyle(.bordered)
+                Divider()
+                MetricTile(title: "Encrypted", value: "\(appState.vaultFiles.count)", icon: "doc.badge.lock", tint: .teal)
+                MetricTile(title: "Quarantine", value: "\(appState.quarantineItems.count)", icon: "shippingbox", tint: .orange)
+                MetricTile(title: "Trusted", value: "\(appState.trustedFiles.count)", icon: "checkmark.seal", tint: .blue)
                 Divider()
                 Label(appState.vaultURL.path, systemImage: "folder")
                     .font(.caption)
@@ -114,12 +133,25 @@ struct MainView: View {
             .frame(minWidth: 240, idealWidth: 280)
 
             VStack(alignment: .leading, spacing: 0) {
-                Text("Encrypted Files")
-                    .font(.title3.bold())
-                    .padding([.top, .horizontal], 16)
-                List(appState.vaultFiles, selection: $selectedItem) { item in
-                    VaultRow(item: item)
-                        .tag(item)
+                SectionHeader(
+                    title: "Encrypted Files",
+                    subtitle: appState.isDecoyMode ? "Showing files in .vault_decoy" : "Showing files in .vault"
+                )
+                if appState.vaultFiles.isEmpty {
+                    EmptyStateView(
+                        icon: "tray",
+                        title: "Vault is empty",
+                        message: "Choose files to encrypt. They will appear here as .k3enc files compatible with the Windows build.",
+                        primaryTitle: "Encrypt Files",
+                        primaryIcon: "lock.doc"
+                    ) {
+                        showingImporter = true
+                    }
+                } else {
+                    List(appState.vaultFiles, selection: $selectedItem) { item in
+                        VaultRow(item: item)
+                            .tag(item)
+                    }
                 }
             }
             .frame(minWidth: 560)
@@ -129,6 +161,8 @@ struct MainView: View {
     private var securityTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
+                SectionHeader(title: "Security Center", subtitle: "Portable layout, vault integrity, and runtime health")
+                Spacer()
                 Button { appState.verifyVaultIntegrity() } label: {
                     Label("Verify Vault", systemImage: "checkmark.shield")
                 }
@@ -138,7 +172,6 @@ struct MainView: View {
                 Button { appState.reloadFeatureData() } label: {
                     Label("Reload", systemImage: "arrow.clockwise")
                 }
-                Spacer()
             }
             List(appState.securityRows) { row in
                 HStack {
@@ -158,6 +191,8 @@ struct MainView: View {
     private var antivirusTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
+                SectionHeader(title: "Antivirus", subtitle: "Scan with K3 USB heuristics and ClamAV when available")
+                Spacer()
                 Button {
                     scanAllowsDirectories = true
                     showingScanImporter = true
@@ -176,27 +211,39 @@ struct MainView: View {
                     Label("Quarantine", systemImage: "shippingbox")
                 }
                 .disabled(selectedFinding?.status != "Threat")
-                Spacer()
             }
-            List(appState.scanFindings, selection: $selectedFinding) { finding in
-                HStack {
-                    Image(systemName: finding.status == "Threat" ? "exclamationmark.triangle.fill" : finding.status == "Trusted" ? "checkmark.seal.fill" : "checkmark.circle")
-                        .foregroundStyle(finding.status == "Threat" ? .red : finding.status == "Trusted" ? .blue : .green)
-                    VStack(alignment: .leading) {
-                        Text(finding.url.lastPathComponent)
-                        Text(finding.url.path)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                    Text(finding.status)
-                        .frame(width: 80, alignment: .leading)
-                    Text(finding.signature)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 220, alignment: .leading)
+            if appState.scanFindings.isEmpty {
+                EmptyStateView(
+                    icon: "magnifyingglass",
+                    title: "No scan results yet",
+                    message: "Scan a folder or individual files to see clean, trusted, and suspicious items here.",
+                    primaryTitle: "Scan Folder",
+                    primaryIcon: "folder.badge.gearshape"
+                ) {
+                    scanAllowsDirectories = true
+                    showingScanImporter = true
                 }
-                .tag(finding)
+            } else {
+                List(appState.scanFindings, selection: $selectedFinding) { finding in
+                    HStack {
+                        Image(systemName: finding.status == "Threat" ? "exclamationmark.triangle.fill" : finding.status == "Trusted" ? "checkmark.seal.fill" : "checkmark.circle")
+                            .foregroundStyle(finding.status == "Threat" ? .red : finding.status == "Trusted" ? .blue : .green)
+                        VStack(alignment: .leading) {
+                            Text(finding.url.lastPathComponent)
+                            Text(finding.url.path)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Text(finding.status)
+                            .frame(width: 80, alignment: .leading)
+                        Text(finding.signature)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 220, alignment: .leading)
+                    }
+                    .tag(finding)
+                }
             }
         }
         .padding(16)
@@ -205,6 +252,8 @@ struct MainView: View {
     private var quarantineTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
+                SectionHeader(title: "Quarantine", subtitle: "Restore or permanently remove isolated files")
+                Spacer()
                 Button { appState.refreshQuarantine() } label: {
                     Label("Reload", systemImage: "arrow.clockwise")
                 }
@@ -220,25 +269,32 @@ struct MainView: View {
                     Label("Delete", systemImage: "trash")
                 }
                 .disabled(selectedQuarantine == nil)
-                Spacer()
             }
-            List(appState.quarantineItems, selection: $selectedQuarantine) { item in
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(item.originalName)
-                        Text(item.originalPath)
-                            .font(.caption)
+            if appState.quarantineItems.isEmpty {
+                EmptyStateView(
+                    icon: "shippingbox",
+                    title: "No quarantined files",
+                    message: "Threats you quarantine from the Antivirus tab will appear here with restore and delete controls."
+                )
+            } else {
+                List(appState.quarantineItems, selection: $selectedQuarantine) { item in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(item.originalName)
+                            Text(item.originalPath)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Text(item.virusName)
+                            .frame(width: 200, alignment: .leading)
+                        Text(item.quarantineDate)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .frame(width: 150, alignment: .leading)
                     }
-                    Spacer()
-                    Text(item.virusName)
-                        .frame(width: 200, alignment: .leading)
-                    Text(item.quarantineDate)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 150, alignment: .leading)
+                    .tag(item)
                 }
-                .tag(item)
             }
         }
         .padding(16)
@@ -247,6 +303,8 @@ struct MainView: View {
     private var trustedTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
+                SectionHeader(title: "Trusted Files", subtitle: "SHA-256 allowlist shared through .k3_trusted_hashes.txt")
+                Spacer()
                 Button { showingTrustImporter = true } label: {
                     Label("Add Files", systemImage: "plus")
                 }
@@ -259,21 +317,32 @@ struct MainView: View {
                 Button { appState.refreshTrustedFiles() } label: {
                     Label("Reload", systemImage: "arrow.clockwise")
                 }
-                Spacer()
             }
-            List(appState.trustedFiles, selection: $selectedTrusted) { entry in
-                HStack {
-                    Text(entry.name)
-                        .frame(width: 220, alignment: .leading)
-                    Text(entry.hash)
-                        .font(.system(.caption, design: .monospaced))
-                        .lineLimit(1)
-                    Spacer()
-                    Text(entry.addedAt)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 150, alignment: .leading)
+            if appState.trustedFiles.isEmpty {
+                EmptyStateView(
+                    icon: "checkmark.seal",
+                    title: "No trusted files",
+                    message: "Add known-good tools or installers to prevent scanner false positives by SHA-256.",
+                    primaryTitle: "Add Trusted Files",
+                    primaryIcon: "plus"
+                ) {
+                    showingTrustImporter = true
                 }
-                .tag(entry)
+            } else {
+                List(appState.trustedFiles, selection: $selectedTrusted) { entry in
+                    HStack {
+                        Text(entry.name)
+                            .frame(width: 220, alignment: .leading)
+                        Text(entry.hash)
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(1)
+                        Spacer()
+                        Text(entry.addedAt)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 150, alignment: .leading)
+                    }
+                    .tag(entry)
+                }
             }
         }
         .padding(16)
@@ -282,22 +351,31 @@ struct MainView: View {
     private var historyTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
+                SectionHeader(title: "History", subtitle: "Recent K3 activity on this Mac volume")
+                Spacer()
                 Button { appState.refreshHistory() } label: {
                     Label("Reload", systemImage: "arrow.clockwise")
                 }
                 Button(role: .destructive) { appState.clearHistory() } label: {
                     Label("Clear", systemImage: "trash")
                 }
-                Spacer()
             }
-            List(appState.historyEntries) { entry in
-                HStack {
-                    Text(entry.timestamp)
-                        .frame(width: 150, alignment: .leading)
-                    Text(entry.level)
-                        .frame(width: 70, alignment: .leading)
-                    Text(entry.message)
-                    Spacer()
+            if appState.historyEntries.isEmpty {
+                EmptyStateView(
+                    icon: "clock.arrow.circlepath",
+                    title: "No history yet",
+                    message: "Login, encryption, scan, quarantine, and maintenance actions will be recorded here."
+                )
+            } else {
+                List(appState.historyEntries) { entry in
+                    HStack {
+                        Text(entry.timestamp)
+                            .frame(width: 150, alignment: .leading)
+                        Text(entry.level)
+                            .frame(width: 70, alignment: .leading)
+                        Text(entry.message)
+                        Spacer()
+                    }
                 }
             }
         }
@@ -312,6 +390,7 @@ struct MainView: View {
 
     private var maintenanceTab: some View {
         VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "Maintenance Tools", subtitle: "macOS-safe equivalents for USB repair and cleanup")
             Button { appState.cleanupMacMetadata() } label: {
                 Label("Clean macOS Metadata", systemImage: "sparkles")
             }
@@ -366,6 +445,84 @@ private struct VaultRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct SectionHeader: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.title3.bold())
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct MetricTile: View {
+    let title: String
+    let value: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.headline)
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(10)
+        .background(tint.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct EmptyStateView: View {
+    let icon: String
+    let title: String
+    let message: String
+    var primaryTitle: String?
+    var primaryIcon: String?
+    var action: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            Image(systemName: icon)
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(.teal)
+            Text(title)
+                .font(.title3.bold())
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+            if let primaryTitle, let action {
+                Button(action: action) {
+                    Label(primaryTitle, systemImage: primaryIcon ?? "arrow.right")
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 4)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
     }
 }
 
