@@ -40,6 +40,13 @@ src-mac/.build/release/K3UsbSafeMac
 - Real and decoy vault support.
 - Encrypt files into `.vault` as `.k3enc`.
 - Decrypt selected `.k3enc` files to an output folder.
+- Security Center with portable layout status and vault integrity verification.
+- Antivirus scan UI using K3 USB heuristics plus optional ClamAV if `clamscan` exists.
+- Quarantine manager with restore and permanent delete.
+- Trusted files UI backed by `.k3_trusted_hashes.txt` SHA-256 entries.
+- History log for K3 app actions on macOS.
+- Settings UI for passwords, login text, and portable behavior flags.
+- macOS maintenance tools for metadata cleanup, layout repair, and `diskutil verifyVolume`.
 - Hide K3 support folders/files with `chflags hidden`.
 - Eject the current USB volume with `diskutil eject`.
 - Basic USB malware heuristics plus optional ClamAV if `clamscan` exists.
@@ -48,4 +55,5 @@ src-mac/.build/release/K3UsbSafeMac
 
 - Windows-only features such as Registry history cleanup, CHKDSK, DiskPart read-only mode, and `autorun.inf` auto-run do not exist on macOS.
 - macOS does not allow USB autorun for security reasons.
+- The macOS build provides equivalent maintenance actions where possible: portable layout repair, `.DS_Store`/`._*` cleanup, and `diskutil verifyVolume`.
 - To use ClamAV on macOS, install it with Homebrew or place `clamscan` on `PATH`.

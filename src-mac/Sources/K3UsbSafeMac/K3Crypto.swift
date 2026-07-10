@@ -33,6 +33,22 @@ final class K3Crypto {
     }
 
     func decrypt(file source: URL, to outputFolder: URL) throws -> URL {
+        let decoded = try decode(file: source)
+
+        let output = outputFolder.appendingPathComponent(decoded.fileName)
+        try decoded.data.write(to: output, options: .atomic)
+        return output
+    }
+
+    func verify(file source: URL) throws {
+        _ = try decode(file: source)
+    }
+
+    private static func isMedia(_ ext: String) -> Bool {
+        ["mp4", "zip", "jpg", "jpeg", "png", "mp3", "rar"].contains(ext.lowercased())
+    }
+
+    private func decode(file source: URL) throws -> (fileName: String, data: Data) {
         let allData = try Data(contentsOf: source)
         guard allData.count >= 16 + 32 + 1 + 4 else { throw K3Error.userFacing("Invalid encrypted file.") }
 
@@ -59,14 +75,7 @@ final class K3Crypto {
         if isCompressed {
             decrypted = try Self.gunzip(decrypted)
         }
-
-        let output = outputFolder.appendingPathComponent(fileName)
-        try decrypted.write(to: output, options: .atomic)
-        return output
-    }
-
-    private static func isMedia(_ ext: String) -> Bool {
-        ["mp4", "zip", "jpg", "jpeg", "png", "mp3", "rar"].contains(ext.lowercased())
+        return (fileName, decrypted)
     }
 
     private static func aesCBC(data: Data, key: Data, iv: Data, operation: CCOperation) throws -> Data {
