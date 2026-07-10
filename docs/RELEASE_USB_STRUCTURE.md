@@ -19,6 +19,7 @@ USB-DATA/
 ├─ .vault_decoy/
 ├─ .vault_config.json
 ├─ .k3_history.log
+├─ .k3_integrity_manifest.json
 ├─ .k3_quarantine/
 ├─ .k3_recovery_snapshots/
 ├─ .k3_trusted_hashes.txt
@@ -67,7 +68,7 @@ Quick release from macOS:
 scripts/build-release-usb-mac.sh --usb /Volumes/USB-DATA
 ```
 
-This builds `src-mac`, refreshes `K3 Mac.app`, `mac/K3UsbSafeMac`, `Chay_Mac.command`, README, and K3 rules. It does not delete `.vault`, `.vault_decoy`, `.vault_config.json`, quarantine, history, or existing ClamAV portable tools on the USB.
+This builds `src-mac`, refreshes `K3 Mac.app`, `mac/K3UsbSafeMac`, `Chay_Mac.command`, README, K3 rules, and `.k3_integrity_manifest.json`. It does not delete `.vault`, `.vault_decoy`, `.vault_config.json`, quarantine, history, or existing ClamAV portable tools on the USB.
 
 1. Build macOS:
 

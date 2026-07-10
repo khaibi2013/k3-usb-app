@@ -18,7 +18,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 
 - [x] Self-destruct policy UI: off / lock only / wipe real vault / wipe all sensitive data.
 - [x] Folder encryption with structure preservation.
-- [ ] Integrity manifest for app/tools/rules.
+- [x] Integrity manifest for app/tools/rules.
 - [ ] Recovery key architecture design.
 - [ ] Recovery key implementation for new vault format or compatible bridge.
 

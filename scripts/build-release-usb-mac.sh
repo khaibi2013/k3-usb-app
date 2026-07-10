@@ -129,6 +129,41 @@ Khi update app, khong xoa cac file/thumuc an nay.
 README
 
   mkdir -p "$target/.vault" "$target/.vault_decoy" "$target/BaoMat"
+  write_integrity_manifest "$target"
+  chflags hidden "$target/.k3_integrity_manifest.json" 2>/dev/null || true
+}
+
+write_integrity_manifest() {
+  local target="$1"
+  local manifest="$target/.k3_integrity_manifest.json"
+  local first=1
+  local path file hash size
+  local tracked_paths=(
+    "AnToanUSB.exe"
+    "K3 Mac.app/Contents/Info.plist"
+    "K3 Mac.app/Contents/MacOS/K3UsbSafeMac"
+    "tools/rules/k3-rules.json"
+  )
+
+  {
+    printf '{\n'
+    printf '  "version": 1,\n'
+    printf '  "generated_at": "%s",\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    printf '  "files": [\n'
+    for path in "${tracked_paths[@]}"; do
+      file="$target/$path"
+      [ -f "$file" ] || continue
+      hash="$(shasum -a 256 "$file" | awk '{print $1}')"
+      size="$(stat -f %z "$file")"
+      if [ "$first" -eq 0 ]; then
+        printf ',\n'
+      fi
+      first=0
+      printf '    {"path":"%s","sha256":"%s","size":%s}' "$path" "$hash" "$size"
+    done
+    printf '\n  ]\n'
+    printf '}\n'
+  } > "$manifest"
 }
 
 echo "==> Preparing dist: $DIST_DIR"

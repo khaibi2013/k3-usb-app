@@ -9,6 +9,85 @@ struct TrustedFileEntry: Identifiable, Hashable {
     let addedAt: String
 }
 
+struct IntegrityCheckResult {
+    let checked: Int
+    let failed: [String]
+    let missing: [String]
+    let manifestExists: Bool
+
+    var hasWarning: Bool {
+        !manifestExists || !failed.isEmpty || !missing.isEmpty
+    }
+
+    var status: String {
+        if !manifestExists { return "Chua co manifest" }
+        if failed.isEmpty && missing.isEmpty { return "Hop le" }
+        return "Canh bao"
+    }
+
+    var detail: String {
+        if !manifestExists { return ".k3_integrity_manifest.json" }
+        if failed.isEmpty && missing.isEmpty { return "\(checked) file dung hash" }
+        let values = failed + missing.map { "\($0) thieu" }
+        return values.prefix(3).joined(separator: ", ")
+    }
+}
+
+private struct IntegrityManifest: Codable {
+    let version: Int
+    let generatedAt: String
+    let files: [IntegrityManifestFile]
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case generatedAt = "generated_at"
+        case files
+    }
+}
+
+private struct IntegrityManifestFile: Codable {
+    let path: String
+    let sha256: String
+    let size: Int64
+}
+
+enum K3IntegrityManager {
+    static func manifestURL(at root: URL) -> URL {
+        root.appendingPathComponent(".k3_integrity_manifest.json")
+    }
+
+    static func verify(at root: URL) -> IntegrityCheckResult {
+        let manifestURL = manifestURL(at: root)
+        guard let data = try? Data(contentsOf: manifestURL),
+              let manifest = try? JSONDecoder().decode(IntegrityManifest.self, from: data) else {
+            return IntegrityCheckResult(checked: 0, failed: [], missing: [], manifestExists: false)
+        }
+
+        var failed: [String] = []
+        var missing: [String] = []
+        var checked = 0
+        for file in manifest.files {
+            let url = root.appendingPathComponent(file.path)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                missing.append(file.path)
+                continue
+            }
+            guard let hash = K3TrustedFileManager.sha256(url) else {
+                failed.append(file.path)
+                continue
+            }
+            let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1)
+            if hash.caseInsensitiveCompare(file.sha256) != .orderedSame || size != file.size {
+                failed.append(file.path)
+            } else {
+                checked += 1
+            }
+        }
+
+        return IntegrityCheckResult(checked: checked, failed: failed, missing: missing, manifestExists: true)
+    }
+}
+
 enum K3TrustedFileManager {
     static func trustedFileURL(at root: URL) -> URL {
         root.appendingPathComponent(".k3_trusted_hashes.txt")

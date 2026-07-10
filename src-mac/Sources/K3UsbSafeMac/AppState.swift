@@ -420,6 +420,10 @@ final class AppState: ObservableObject {
         refreshQuarantine()
         refreshHistory()
         reloadSecurityRows()
+        let integrity = K3IntegrityManager.verify(at: usbRoot)
+        if integrity.manifestExists && integrity.hasWarning {
+            statusMessage = "Canh bao: app/rules/tools tren USB co the da bi sua."
+        }
     }
 
     func scan(urls: [URL], createSnapshot: Bool = true) {
@@ -770,11 +774,13 @@ final class AppState: ObservableObject {
         let realVault = usbRoot.appendingPathComponent(".vault", isDirectory: true)
         let decoyVault = usbRoot.appendingPathComponent(".vault_decoy", isDirectory: true)
         let baoMat = usbRoot.appendingPathComponent("BaoMat", isDirectory: true)
+        let integrity = K3IntegrityManager.verify(at: usbRoot)
         securityRows = [
             SecurityRow(name: "Ket that", status: exists(realVault) ? "San sang" : "Thieu", suggestion: ".vault"),
             SecurityRow(name: "Ket gia", status: exists(decoyVault) ? "San sang" : "Thieu", suggestion: ".vault_decoy"),
             SecurityRow(name: "Thu muc BaoMat", status: exists(baoMat) ? "San sang" : "Thieu", suggestion: "Noi staging tu dong ma hoa"),
             SecurityRow(name: "Cau hinh bao mat", status: exists(configURL) ? "San sang" : "Thieu", suggestion: ".vault_config.json"),
+            SecurityRow(name: "Toan ven USB", status: integrity.status, suggestion: integrity.detail),
             SecurityRow(name: "File tin cay", status: "\(trustedFiles.count) muc", suggestion: ".k3_trusted_hashes.txt"),
             SecurityRow(name: "Khu cach ly", status: "\(quarantineItems.count) muc", suggestion: ".k3_quarantine"),
             SecurityRow(name: "Snapshot phuc hoi", status: exists(K3RecoverySnapshotManager.snapshotRoot(at: usbRoot)) ? "Da bat" : "Chua co", suggestion: ".k3_recovery_snapshots"),
