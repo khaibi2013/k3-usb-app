@@ -7,7 +7,7 @@ final class AppState: ObservableObject {
     @Published var config: K3Config
     @Published var isAuthenticated = false
     @Published var isDecoyMode = false
-    @Published var statusMessage = "Disconnected"
+    @Published var statusMessage = "Chua ket noi"
     @Published var vaultFiles: [VaultItem] = []
     @Published var scanFindings: [ScanFinding] = []
     @Published var quarantineItems: [QuarantineItem] = []
@@ -37,9 +37,9 @@ final class AppState: ObservableObject {
             try K3PortableLayout.hideSupportFiles(at: usbRoot)
             reloadFeatureData()
             loadLocalBrowser(at: usbRoot)
-            statusMessage = "Ready"
+            statusMessage = "San sang"
         } catch {
-            statusMessage = "Setup warning: \(error.localizedDescription)"
+            statusMessage = "Canh bao khoi tao: \(error.localizedDescription)"
         }
     }
 
@@ -50,7 +50,7 @@ final class AppState: ObservableObject {
         config.needsInitialSetup = false
         try K3ConfigStore.save(config, at: usbRoot)
         try login(password: realPassword)
-        K3HistoryManager.append("INFO", "Initial password setup completed", root: usbRoot)
+        K3HistoryManager.append("INFO", "Da thiet lap mat khau ban dau", root: usbRoot)
     }
 
     func login(password: String) throws {
@@ -59,13 +59,13 @@ final class AppState: ObservableObject {
         } else if K3PasswordHasher.verify(password, stored: config.realHash) {
             isDecoyMode = false
         } else {
-            throw K3Error.userFacing("Wrong password.")
+            throw K3Error.userFacing("Sai mat khau.")
         }
 
         crypto = try K3Crypto(password: password, cryptoSaltBase64: config.cryptoSalt)
         isAuthenticated = true
-        statusMessage = "Connected"
-        K3HistoryManager.append("INFO", isDecoyMode ? "Logged in to decoy vault" : "Logged in to secure vault", root: usbRoot)
+        statusMessage = "Da ket noi"
+        K3HistoryManager.append("INFO", isDecoyMode ? "Da dang nhap ket gia" : "Da dang nhap ket that", root: usbRoot)
         refreshVault()
         reloadFeatureData()
         loadLocalBrowser(at: browserURL)
@@ -73,13 +73,13 @@ final class AppState: ObservableObject {
     }
 
     func logout() {
-        K3HistoryManager.append("INFO", "Logged out", root: usbRoot)
+        K3HistoryManager.append("INFO", "Da dang xuat", root: usbRoot)
         stopAutoEncryptWatcher()
         crypto = nil
         isAuthenticated = false
         isDecoyMode = false
         vaultFiles = []
-        statusMessage = "Disconnected"
+        statusMessage = "Da ngat ket noi"
     }
 
     var vaultURL: URL {
@@ -96,7 +96,7 @@ final class AppState: ObservableObject {
             reloadSecurityRows()
         } catch {
             vaultFiles = []
-            statusMessage = "Vault refresh failed: \(error.localizedDescription)"
+            statusMessage = "Nap lai ket that bai: \(error.localizedDescription)"
         }
     }
 
@@ -106,7 +106,7 @@ final class AppState: ObservableObject {
             var encryptedCount = 0
             for file in files {
                 if K3TrustedFileManager.isTrusted(file, root: usbRoot) {
-                    K3HistoryManager.append("INFO", "Trusted file skipped by scanner: \(file.lastPathComponent)", root: usbRoot)
+                    K3HistoryManager.append("INFO", "File tin cay bo qua quet: \(file.lastPathComponent)", root: usbRoot)
                     try K3Vault.encrypt(file: file, into: vaultURL, crypto: crypto)
                     if removeOriginal { try? K3Maintenance.secureShredFile(file) }
                     encryptedCount += 1
@@ -114,7 +114,7 @@ final class AppState: ObservableObject {
                 }
                 let scan = K3MacScanner.scan(file)
                 if scan.isThreat {
-                    statusMessage = "Blocked: \(file.lastPathComponent) - \(scan.name)"
+                    statusMessage = "Da chan: \(file.lastPathComponent) - \(scan.name)"
                     scanFindings.append(ScanFinding(url: file, status: "Threat", signature: scan.name))
                     K3HistoryManager.append("WARN", statusMessage, root: usbRoot)
                     continue
@@ -122,21 +122,21 @@ final class AppState: ObservableObject {
                 try K3Vault.encrypt(file: file, into: vaultURL, crypto: crypto)
                 if removeOriginal { try? K3Maintenance.secureShredFile(file) }
                 encryptedCount += 1
-                K3HistoryManager.append("INFO", "Encrypted \(file.lastPathComponent)", root: usbRoot)
+                K3HistoryManager.append("INFO", "Da ma hoa \(file.lastPathComponent)", root: usbRoot)
             }
             refreshVault()
             loadLocalBrowser(at: browserURL)
             refreshHistory()
-            statusMessage = "Encrypted \(encryptedCount) item(s)."
+            statusMessage = "Da ma hoa \(encryptedCount) muc."
         } catch {
-            statusMessage = "Encrypt failed: \(error.localizedDescription)"
+            statusMessage = "Ma hoa that bai: \(error.localizedDescription)"
         }
     }
 
     func loadLocalBrowser(at folder: URL) {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            statusMessage = "Folder not found."
+            statusMessage = "Khong tim thay thu muc."
             return
         }
 
@@ -162,7 +162,7 @@ final class AppState: ObservableObject {
             }
         } catch {
             localItems = []
-            statusMessage = "Browse failed: \(error.localizedDescription)"
+            statusMessage = "Duyet thu muc that bai: \(error.localizedDescription)"
         }
     }
 
@@ -182,12 +182,12 @@ final class AppState: ObservableObject {
 
     func encryptLocalSelection(_ item: LocalFileItem?) {
         guard let item else {
-            statusMessage = "Select a file or folder to put into the vault."
+            statusMessage = "Hay chon file hoac thu muc de dua vao ket."
             return
         }
         let urls = item.isDirectory ? scanFiles(at: item.url) : [item.url]
         guard !urls.isEmpty else {
-            statusMessage = "Selected folder has no files to encrypt."
+            statusMessage = "Thu muc da chon khong co file de ma hoa."
             return
         }
         encryptIntoVault(files: urls, removeOriginal: true)
@@ -195,7 +195,7 @@ final class AppState: ObservableObject {
 
     func decryptVaultSelectionToBrowser(_ item: VaultItem?) {
         guard let item else {
-            statusMessage = "Select an encrypted file to take out of the vault."
+            statusMessage = "Hay chon file ma hoa de dua ra khoi ket."
             return
         }
         decrypt(item, to: browserURL)
@@ -204,7 +204,7 @@ final class AppState: ObservableObject {
 
     func createAndEncryptTextNote(title: String, content: String) {
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            statusMessage = "Note title is required."
+            statusMessage = "Can nhap ten ghi chu."
             return
         }
         guard let crypto else { return }
@@ -219,11 +219,11 @@ final class AppState: ObservableObject {
             try content.write(to: noteURL, atomically: true, encoding: .utf8)
             try K3Vault.encrypt(file: noteURL, into: vaultURL, crypto: crypto)
             refreshVault()
-            statusMessage = "Encrypted note \(safeTitle).txt."
+            statusMessage = "Da ma hoa ghi chu \(safeTitle).txt."
             K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
             refreshHistory()
         } catch {
-            statusMessage = "Create note failed: \(error.localizedDescription)"
+            statusMessage = "Tao ghi chu that bai: \(error.localizedDescription)"
         }
     }
 
@@ -232,13 +232,13 @@ final class AppState: ObservableObject {
             try FileManager.default.createDirectory(at: baoMatURL, withIntermediateDirectories: true)
             let files = scanFiles(at: baoMatURL).filter { $0.pathExtension.lowercased() != "k3enc" }
             guard !files.isEmpty else {
-                statusMessage = "BaoMat has no files to encrypt."
+                statusMessage = "BaoMat khong co file de ma hoa."
                 return
             }
             encryptIntoVault(files: files, removeOriginal: true)
             loadLocalBrowser(at: browserURL)
         } catch {
-            statusMessage = "BaoMat encrypt failed: \(error.localizedDescription)"
+            statusMessage = "Ma hoa BaoMat that bai: \(error.localizedDescription)"
         }
     }
 
@@ -247,9 +247,9 @@ final class AppState: ObservableObject {
             try FileManager.default.createDirectory(at: baoMatURL, withIntermediateDirectories: true)
             MacSystemTools.clearHidden(baoMatURL)
             NSWorkspace.shared.open(baoMatURL)
-            statusMessage = "Opened BaoMat folder."
+            statusMessage = "Da mo thu muc BaoMat."
         } catch {
-            statusMessage = "Open BaoMat failed: \(error.localizedDescription)"
+            statusMessage = "Mo BaoMat that bai: \(error.localizedDescription)"
         }
     }
 
@@ -257,11 +257,11 @@ final class AppState: ObservableObject {
         guard let crypto else { return }
         do {
             try K3Vault.decrypt(file: item.url, to: outputFolder, crypto: crypto)
-            statusMessage = "Decrypted \(item.displayName)."
-            K3HistoryManager.append("INFO", "Decrypted \(item.displayName)", root: usbRoot)
+            statusMessage = "Da giai ma \(item.displayName)."
+            K3HistoryManager.append("INFO", "Da giai ma \(item.displayName)", root: usbRoot)
             refreshHistory()
         } catch {
-            statusMessage = "Decrypt failed: \(error.localizedDescription)"
+            statusMessage = "Giai ma that bai: \(error.localizedDescription)"
         }
     }
 
@@ -276,7 +276,7 @@ final class AppState: ObservableObject {
             logout()
             try MacSystemTools.ejectVolume(at: usbRoot)
         } catch {
-            statusMessage = "Eject failed: \(error.localizedDescription)"
+            statusMessage = "Day USB/ISO ra that bai: \(error.localizedDescription)"
         }
     }
 
@@ -291,7 +291,7 @@ final class AppState: ObservableObject {
     func scan(urls: [URL]) {
         var findings: [ScanFinding] = []
         if let snapshot = try? K3RecoverySnapshotManager.createSnapshot(for: urls, root: usbRoot) {
-            K3HistoryManager.append("INFO", "Created recovery snapshot: \(snapshot.fileCount) file(s), \(snapshot.bytes / 1024) KB", root: usbRoot)
+            K3HistoryManager.append("INFO", "Da tao snapshot phuc hoi: \(snapshot.fileCount) file, \(snapshot.bytes / 1024) KB", root: usbRoot)
         }
         for url in urls {
             let didAccess = url.startAccessingSecurityScopedResource()
@@ -301,7 +301,7 @@ final class AppState: ObservableObject {
             let files = scanFiles(at: url)
             for file in files {
                 if K3TrustedFileManager.isTrusted(file, root: usbRoot) {
-                    findings.append(ScanFinding(url: file, status: "Trusted", signature: "SHA-256 allowlist"))
+                    findings.append(ScanFinding(url: file, status: "Trusted", signature: "Danh sach tin cay SHA-256"))
                     continue
                 }
                 let result = K3MacScanner.scan(file)
@@ -309,21 +309,39 @@ final class AppState: ObservableObject {
             }
         }
         scanFindings = findings
+        guard !findings.isEmpty else {
+            statusMessage = "Khong tim thay file de quet."
+            K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
+            refreshHistory()
+            return
+        }
         let threats = findings.filter { $0.status == "Threat" }.count
-        statusMessage = "Scan complete: \(threats) threat(s), \(findings.count) file(s)."
+        statusMessage = "Quet xong: \(threats) moi de doa, \(findings.count) file."
         K3HistoryManager.append(threats == 0 ? "INFO" : "WARN", statusMessage, root: usbRoot)
         refreshHistory()
+    }
+
+    func scanCurrentFolder() {
+        scan(urls: [browserURL])
+    }
+
+    func scanBaoMat() {
+        scan(urls: [baoMatURL])
+    }
+
+    func scanUsbRoot() {
+        scan(urls: [usbRoot])
     }
 
     func updateClamAVDatabase() {
         do {
             let output = try K3MacScanner.updateClamAVDatabase()
-            statusMessage = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? "ClamAV database updated."
-            K3HistoryManager.append("INFO", "ClamAV database update completed", root: usbRoot)
+            statusMessage = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? "Da cap nhat CSDL ClamAV."
+            K3HistoryManager.append("INFO", "Da cap nhat CSDL ClamAV", root: usbRoot)
             antivirusEngineInfo = K3MacScanner.engineInfo()
             refreshHistory()
         } catch {
-            statusMessage = "ClamAV update failed: \(error.localizedDescription)"
+            statusMessage = "Cap nhat ClamAV that bai: \(error.localizedDescription)"
             K3HistoryManager.append("WARN", statusMessage, root: usbRoot)
             refreshHistory()
         }
@@ -332,37 +350,37 @@ final class AppState: ObservableObject {
     func quarantine(_ finding: ScanFinding) {
         do {
             try K3QuarantineManager.quarantine(finding.url, virusName: finding.signature, root: usbRoot)
-            statusMessage = "Quarantined \(finding.url.lastPathComponent)."
+            statusMessage = "Da cach ly \(finding.url.lastPathComponent)."
             K3HistoryManager.append("WARN", statusMessage, root: usbRoot)
             scanFindings.removeAll { $0.id == finding.id }
             refreshQuarantine()
             refreshHistory()
         } catch {
-            statusMessage = "Quarantine failed: \(error.localizedDescription)"
+            statusMessage = "Cach ly that bai: \(error.localizedDescription)"
         }
     }
 
     func restoreQuarantine(_ item: QuarantineItem) {
         do {
             try K3QuarantineManager.restore(item)
-            statusMessage = "Restored \(item.originalName)."
+            statusMessage = "Da khoi phuc \(item.originalName)."
             K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
             refreshQuarantine()
             refreshHistory()
         } catch {
-            statusMessage = "Restore failed: \(error.localizedDescription)"
+            statusMessage = "Khoi phuc that bai: \(error.localizedDescription)"
         }
     }
 
     func deleteQuarantine(_ item: QuarantineItem) {
         do {
             try K3QuarantineManager.delete(item)
-            statusMessage = "Deleted quarantined \(item.originalName)."
+            statusMessage = "Da xoa an toan file cach ly \(item.originalName)."
             K3HistoryManager.append("WARN", statusMessage, root: usbRoot)
             refreshQuarantine()
             refreshHistory()
         } catch {
-            statusMessage = "Delete failed: \(error.localizedDescription)"
+            statusMessage = "Xoa that bai: \(error.localizedDescription)"
         }
     }
 
@@ -378,13 +396,13 @@ final class AppState: ObservableObject {
                     if didAccess { file.stopAccessingSecurityScopedResource() }
                 }
                 _ = try K3TrustedFileManager.trust(file, root: usbRoot)
-                K3HistoryManager.append("INFO", "Trusted \(file.lastPathComponent)", root: usbRoot)
+                K3HistoryManager.append("INFO", "Da tin cay \(file.lastPathComponent)", root: usbRoot)
             }
             refreshTrustedFiles()
             refreshHistory()
-            statusMessage = "Trusted list updated."
+            statusMessage = "Da cap nhat danh sach tin cay."
         } catch {
-            statusMessage = "Trust failed: \(error.localizedDescription)"
+            statusMessage = "Them tin cay that bai: \(error.localizedDescription)"
         }
     }
 
@@ -392,9 +410,9 @@ final class AppState: ObservableObject {
         do {
             try K3TrustedFileManager.remove(entry, root: usbRoot)
             refreshTrustedFiles()
-            statusMessage = "Trusted entry removed."
+            statusMessage = "Da xoa khoi danh sach tin cay."
         } catch {
-            statusMessage = "Remove trusted failed: \(error.localizedDescription)"
+            statusMessage = "Xoa tin cay that bai: \(error.localizedDescription)"
         }
     }
 
@@ -416,22 +434,22 @@ final class AppState: ObservableObject {
                     bad += 1
                 }
             }
-            statusMessage = "Vault verify: \(ok) valid, \(bad) failed."
+            statusMessage = "Kiem tra ket: \(ok) hop le, \(bad) loi."
             K3HistoryManager.append(bad == 0 ? "INFO" : "WARN", statusMessage, root: usbRoot)
             refreshHistory()
         } catch {
-            statusMessage = "Vault verify failed: \(error.localizedDescription)"
+            statusMessage = "Kiem tra ket that bai: \(error.localizedDescription)"
         }
     }
 
     func cleanupMacMetadata() {
         do {
             let count = try K3Maintenance.cleanupMacMetadata(at: usbRoot)
-            statusMessage = "Removed \(count) macOS metadata file(s)."
+            statusMessage = "Da xoa \(count) file metadata macOS."
             K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
             refreshHistory()
         } catch {
-            statusMessage = "Cleanup failed: \(error.localizedDescription)"
+            statusMessage = "Don dep that bai: \(error.localizedDescription)"
         }
     }
 
@@ -439,22 +457,22 @@ final class AppState: ObservableObject {
         do {
             try K3Maintenance.repairPortableLayout(at: usbRoot)
             reloadFeatureData()
-            statusMessage = "Portable layout repaired."
+            statusMessage = "Da sua cau truc portable."
             K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
             refreshHistory()
         } catch {
-            statusMessage = "Repair failed: \(error.localizedDescription)"
+            statusMessage = "Sua cau truc that bai: \(error.localizedDescription)"
         }
     }
 
     func verifyVolume() {
         do {
             let output = try K3Maintenance.verifyVolume(at: usbRoot)
-            statusMessage = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? "Volume verify complete."
-            K3HistoryManager.append("INFO", "diskutil verifyVolume completed", root: usbRoot)
+            statusMessage = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? "Da kiem tra volume."
+            K3HistoryManager.append("INFO", "Da chay diskutil verifyVolume", root: usbRoot)
             refreshHistory()
         } catch {
-            statusMessage = "Volume verify failed: \(error.localizedDescription)"
+            statusMessage = "Kiem tra volume that bai: \(error.localizedDescription)"
         }
     }
 
@@ -480,29 +498,29 @@ final class AppState: ObservableObject {
             config.wipeHistory = wipeHistory ? "true" : "false"
             config.wipeMacos = wipeMacos ? "true" : "false"
             try K3ConfigStore.save(config, at: usbRoot)
-            statusMessage = "Settings saved."
+            statusMessage = "Da luu cai dat."
             K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
             reloadFeatureData()
             startAutoEncryptWatcher()
         } catch {
-            statusMessage = "Settings save failed: \(error.localizedDescription)"
+            statusMessage = "Luu cai dat that bai: \(error.localizedDescription)"
         }
     }
 
     func changePasswords(realPassword: String, decoyPassword: String) {
         do {
-            guard realPassword.count >= 6 else { throw K3Error.userFacing("Real password must be at least 6 characters.") }
-            guard realPassword != decoyPassword else { throw K3Error.userFacing("Decoy password must differ from real password.") }
+            guard realPassword.count >= 6 else { throw K3Error.userFacing("Mat khau that can it nhat 6 ky tu.") }
+            guard realPassword != decoyPassword else { throw K3Error.userFacing("Mat khau gia phai khac mat khau that.") }
             config.realHash = try K3PasswordHasher.hash(realPassword)
             config.decoyHash = decoyPassword.isEmpty ? "" : try K3PasswordHasher.hash(decoyPassword)
             try K3ConfigStore.save(config, at: usbRoot)
             crypto = try K3Crypto(password: realPassword, cryptoSaltBase64: config.cryptoSalt)
             isDecoyMode = false
-            statusMessage = "Passwords updated."
+            statusMessage = "Da cap nhat mat khau."
             K3HistoryManager.append("WARN", statusMessage, root: usbRoot)
             refreshHistory()
         } catch {
-            statusMessage = "Password update failed: \(error.localizedDescription)"
+            statusMessage = "Doi mat khau that bai: \(error.localizedDescription)"
         }
     }
 
@@ -514,9 +532,9 @@ final class AppState: ObservableObject {
         do {
             try K3HistoryManager.clear(at: usbRoot)
             historyEntries = []
-            statusMessage = "History cleared."
+            statusMessage = "Da xoa nhat ky."
         } catch {
-            statusMessage = "Clear history failed: \(error.localizedDescription)"
+            statusMessage = "Xoa nhat ky that bai: \(error.localizedDescription)"
         }
     }
 
@@ -552,7 +570,7 @@ final class AppState: ObservableObject {
         let newFiles = candidates.filter { autoEncryptSeen.insert($0.path).inserted }
         guard !newFiles.isEmpty else { return }
         encryptIntoVault(files: newFiles, removeOriginal: true)
-        K3HistoryManager.append("INFO", "Auto-encrypted \(newFiles.count) new file(s)", root: usbRoot)
+        K3HistoryManager.append("INFO", "Tu dong ma hoa \(newFiles.count) file moi", root: usbRoot)
         refreshHistory()
     }
 
@@ -562,16 +580,16 @@ final class AppState: ObservableObject {
         let decoyVault = usbRoot.appendingPathComponent(".vault_decoy", isDirectory: true)
         let baoMat = usbRoot.appendingPathComponent("BaoMat", isDirectory: true)
         securityRows = [
-            SecurityRow(name: "Secure vault", status: exists(realVault) ? "Ready" : "Missing", suggestion: ".vault"),
-            SecurityRow(name: "Decoy vault", status: exists(decoyVault) ? "Ready" : "Missing", suggestion: ".vault_decoy"),
-            SecurityRow(name: "BaoMat folder", status: exists(baoMat) ? "Ready" : "Missing", suggestion: "Auto-encrypt staging folder"),
-            SecurityRow(name: "Security config", status: exists(configURL) ? "Ready" : "Missing", suggestion: ".vault_config.json"),
-            SecurityRow(name: "Trusted hashes", status: "\(trustedFiles.count) item(s)", suggestion: ".k3_trusted_hashes.txt"),
-            SecurityRow(name: "Quarantine", status: "\(quarantineItems.count) item(s)", suggestion: ".k3_quarantine"),
-            SecurityRow(name: "Recovery snapshots", status: exists(K3RecoverySnapshotManager.snapshotRoot(at: usbRoot)) ? "Enabled" : "No snapshots", suggestion: ".k3_recovery_snapshots"),
-            SecurityRow(name: "Auto encrypt", status: autoEncryptActive ? "Watching" : "Off", suggestion: config.autoEncryptFolder.isEmpty ? "Disabled in settings" : config.autoEncryptFolder),
-            SecurityRow(name: "ClamAV", status: antivirusEngineInfo.clamAvailable ? "Available" : "Not found", suggestion: antivirusEngineInfo.clamScanPath ?? "Install ClamAV for signature scans"),
-            SecurityRow(name: "Encrypted files", status: "\(vaultFiles.count) item(s)", suggestion: isDecoyMode ? "Decoy mode" : "Real vault")
+            SecurityRow(name: "Ket that", status: exists(realVault) ? "San sang" : "Thieu", suggestion: ".vault"),
+            SecurityRow(name: "Ket gia", status: exists(decoyVault) ? "San sang" : "Thieu", suggestion: ".vault_decoy"),
+            SecurityRow(name: "Thu muc BaoMat", status: exists(baoMat) ? "San sang" : "Thieu", suggestion: "Noi staging tu dong ma hoa"),
+            SecurityRow(name: "Cau hinh bao mat", status: exists(configURL) ? "San sang" : "Thieu", suggestion: ".vault_config.json"),
+            SecurityRow(name: "File tin cay", status: "\(trustedFiles.count) muc", suggestion: ".k3_trusted_hashes.txt"),
+            SecurityRow(name: "Khu cach ly", status: "\(quarantineItems.count) muc", suggestion: ".k3_quarantine"),
+            SecurityRow(name: "Snapshot phuc hoi", status: exists(K3RecoverySnapshotManager.snapshotRoot(at: usbRoot)) ? "Da bat" : "Chua co", suggestion: ".k3_recovery_snapshots"),
+            SecurityRow(name: "Tu dong ma hoa", status: autoEncryptActive ? "Dang theo doi" : "Tat", suggestion: config.autoEncryptFolder.isEmpty ? "Tat trong cai dat" : config.autoEncryptFolder),
+            SecurityRow(name: "ClamAV", status: antivirusEngineInfo.clamAvailable ? "Co san" : "Chua cai", suggestion: antivirusEngineInfo.clamScanPath ?? "Cai ClamAV de quet chu ky"),
+            SecurityRow(name: "File ma hoa", status: "\(vaultFiles.count) muc", suggestion: isDecoyMode ? "Che do ket gia" : "Ket that")
         ]
     }
 
@@ -597,7 +615,7 @@ final class AppState: ObservableObject {
             .components(separatedBy: invalid)
             .joined(separator: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleaned.isEmpty ? "Secure Note" : cleaned
+        return cleaned.isEmpty ? "Ghi chu bao mat" : cleaned
     }
 }
 

@@ -24,26 +24,26 @@ struct LoginView: View {
                 .font(.title2.bold())
 
             if appState.config.needsInitialSetup {
-                SecureField("New password", text: $password)
+                SecureField("Mat khau moi", text: $password)
                     .textFieldStyle(.roundedBorder)
                     .focused($focusedField, equals: .password)
                     .onSubmit { focusedField = .confirmPassword }
-                SecureField("Confirm password", text: $confirmPassword)
+                SecureField("Nhap lai mat khau", text: $confirmPassword)
                     .textFieldStyle(.roundedBorder)
                     .focused($focusedField, equals: .confirmPassword)
                     .onSubmit { focusedField = .decoyPassword }
-                SecureField("Decoy password (optional)", text: $decoyPassword)
+                SecureField("Mat khau gia (tuy chon)", text: $decoyPassword)
                     .textFieldStyle(.roundedBorder)
                     .focused($focusedField, equals: .decoyPassword)
                     .onSubmit { setup() }
-                Button("Create Vault") { setup() }
+                Button("Tao ket sat") { setup() }
                     .buttonStyle(.borderedProminent)
             } else {
-                SecureField("Password", text: $password)
+                SecureField("Mat khau", text: $password)
                     .textFieldStyle(.roundedBorder)
                     .focused($focusedField, equals: .password)
                     .onSubmit { login() }
-                Button("Login") { login() }
+                Button("Dang nhap") { login() }
                     .buttonStyle(.borderedProminent)
             }
 
@@ -74,11 +74,11 @@ struct LoginView: View {
     private func setup() {
         errorText = ""
         guard password.count >= 6 else {
-            errorText = "Password must be at least 6 characters."
+            errorText = "Mat khau can it nhat 6 ky tu."
             return
         }
         guard password == confirmPassword else {
-            errorText = "Passwords do not match."
+            errorText = "Hai mat khau khong khop."
             return
         }
         do {

@@ -21,21 +21,21 @@ struct MainView: View {
             Divider()
             TabView {
                 vaultTab
-                    .tabItem { Label("Vault", systemImage: "externaldrive.badge.lock") }
+                    .tabItem { Label("Ket sat", systemImage: "externaldrive.badge.lock") }
                 securityTab
-                    .tabItem { Label("Security", systemImage: "shield.checkered") }
+                    .tabItem { Label("Bao mat", systemImage: "shield.checkered") }
                 antivirusTab
-                    .tabItem { Label("Antivirus", systemImage: "cross.case") }
+                    .tabItem { Label("Diet virus", systemImage: "cross.case") }
                 quarantineTab
-                    .tabItem { Label("Quarantine", systemImage: "shippingbox") }
+                    .tabItem { Label("Cach ly", systemImage: "shippingbox") }
                 trustedTab
-                    .tabItem { Label("Trusted", systemImage: "checkmark.seal") }
+                    .tabItem { Label("Tin cay", systemImage: "checkmark.seal") }
                 historyTab
-                    .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
+                    .tabItem { Label("Nhat ky", systemImage: "clock.arrow.circlepath") }
                 settingsTab
-                    .tabItem { Label("Settings", systemImage: "gearshape") }
+                    .tabItem { Label("Cai dat", systemImage: "gearshape") }
                 maintenanceTab
-                    .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
+                    .tabItem { Label("Cong cu", systemImage: "wrench.and.screwdriver") }
             }
             Divider()
             statusBar
@@ -80,7 +80,7 @@ struct MainView: View {
             }
             .frame(width: 46, height: 46)
             VStack(alignment: .leading, spacing: 2) {
-                Text(appState.isDecoyMode ? "Decoy Vault" : "USB An Toan K3")
+                Text(appState.isDecoyMode ? "Ket gia" : "USB An Toan K3")
                     .font(.title3.bold())
                 Text(appState.usbRoot.path)
                     .font(.caption)
@@ -92,13 +92,13 @@ struct MainView: View {
             Button {
                 appState.logout()
             } label: {
-                Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
+                Label("Dang xuat", systemImage: "rectangle.portrait.and.arrow.right")
             }
             .buttonStyle(.bordered)
             Button(role: .destructive) {
                 appState.ejectUsb()
             } label: {
-                Label("Lock & Eject", systemImage: "eject")
+                Label("Khoa & Day ra", systemImage: "eject")
             }
             .buttonStyle(.borderedProminent)
         }
@@ -111,28 +111,28 @@ struct MainView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Button { showingImporter = true } label: {
-                    Label("Encrypt Files", systemImage: "lock.doc")
+                    Label("Ma hoa file", systemImage: "lock.doc")
                 }
                 .buttonStyle(.borderedProminent)
                 Button { showingNewNote = true } label: {
-                    Label("New Note", systemImage: "note.text.badge.plus")
+                    Label("Ghi chu moi", systemImage: "note.text.badge.plus")
                 }
                 .buttonStyle(.bordered)
                 Button { appState.openBaoMatInFinder() } label: {
-                    Label("Open BaoMat", systemImage: "folder")
+                    Label("Mo BaoMat", systemImage: "folder")
                 }
                 .buttonStyle(.bordered)
                 Button { appState.encryptBaoMatFiles() } label: {
-                    Label("Encrypt BaoMat", systemImage: "folder.badge.lock")
+                    Label("Ma hoa BaoMat", systemImage: "folder.badge.lock")
                 }
                 .buttonStyle(.bordered)
                 Spacer()
                 Button { showingDecryptFolder = true } label: {
-                    Label("Decrypt Selected", systemImage: "lock.open")
+                    Label("Giai ma muc chon", systemImage: "lock.open")
                 }
                 .disabled(selectedItem == nil)
                 Button { appState.refreshVault() } label: {
-                    Label("Refresh Vault", systemImage: "arrow.clockwise")
+                    Label("Nap lai ket", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
             }
@@ -161,17 +161,17 @@ struct MainView: View {
     private var localBrowserPane: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                SectionHeader(title: "Local Files", subtitle: appState.browserURL.path)
+                SectionHeader(title: "Tep ben ngoai", subtitle: appState.browserURL.path)
                 Spacer()
                 Button { appState.goToParentFolder() } label: {
                     Image(systemName: "arrow.up")
                 }
-                .help("Parent folder")
+                .help("Len thu muc cha")
                 Button { appState.loadLocalBrowser(at: appState.baoMatURL) } label: {
                     Label("BaoMat", systemImage: "folder")
                 }
                 Button { appState.loadLocalBrowser(at: appState.usbRoot) } label: {
-                    Label("Root", systemImage: "externaldrive")
+                    Label("Goc", systemImage: "externaldrive")
                 }
             }
             .padding(.horizontal, 16)
@@ -180,9 +180,9 @@ struct MainView: View {
             if appState.localItems.isEmpty {
                 EmptyStateView(
                     icon: "folder",
-                    title: "No visible files here",
-                    message: "Open BaoMat, create a note, or choose Encrypt Files from Finder. Folders appear here so you can navigate like the Windows build.",
-                    primaryTitle: "New Note",
+                    title: "Chua co file hien thi",
+                    message: "Mo BaoMat, tao ghi chu, hoac chon file tu Finder. Thu muc/file se hien o day de thao tac nhu ban Windows.",
+                    primaryTitle: "Ghi chu moi",
                     primaryIcon: "note.text.badge.plus"
                 ) {
                     showingNewNote = true
@@ -208,7 +208,7 @@ struct MainView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "arrow.right")
                         .font(.system(size: 24, weight: .bold))
-                    Text("Into Vault")
+                    Text("Dua vao")
                         .font(.caption.bold())
                 }
                 .frame(width: 82, height: 62)
@@ -222,7 +222,7 @@ struct MainView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "arrow.left")
                         .font(.system(size: 24, weight: .bold))
-                    Text("Take Out")
+                    Text("Dua ra")
                         .font(.caption.bold())
                 }
                 .frame(width: 82, height: 62)
@@ -233,8 +233,8 @@ struct MainView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            MetricPill(value: "\(appState.localItems.count)", title: "local")
-            MetricPill(value: "\(appState.vaultFiles.count)", title: "vault")
+            MetricPill(value: "\(appState.localItems.count)", title: "ngoai")
+            MetricPill(value: "\(appState.vaultFiles.count)", title: "ket")
             Spacer()
         }
         .padding(.vertical, 16)
@@ -244,7 +244,7 @@ struct MainView: View {
     private var vaultBrowserPane: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHeader(
-                title: "Vault Files",
+                title: "Tep trong ket",
                 subtitle: appState.isDecoyMode ? ".vault_decoy" : ".vault"
             )
             .padding(.horizontal, 16)
@@ -253,9 +253,9 @@ struct MainView: View {
             if appState.vaultFiles.isEmpty {
                 EmptyStateView(
                     icon: "tray",
-                    title: "Vault is empty",
-                    message: "Select a file or folder on the left, then press the arrow to put it into the vault.",
-                    primaryTitle: "Write Note",
+                    title: "Ket dang trong",
+                    message: "Chon file hoac thu muc ben trai, sau do bam mui ten de dua vao ket.",
+                    primaryTitle: "Viet ghi chu",
                     primaryIcon: "note.text.badge.plus"
                 ) {
                     showingNewNote = true
@@ -272,16 +272,16 @@ struct MainView: View {
     private var securityTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                SectionHeader(title: "Security Center", subtitle: "Portable layout, vault integrity, and runtime health")
+                SectionHeader(title: "Trung tam bao mat", subtitle: "Kiem tra cau truc portable, tinh toan ven ket va trang thai he thong")
                 Spacer()
                 Button { appState.verifyVaultIntegrity() } label: {
-                    Label("Verify Vault", systemImage: "checkmark.shield")
+                    Label("Kiem tra ket", systemImage: "checkmark.shield")
                 }
                 Button { appState.repairPortableLayout() } label: {
-                    Label("Repair Layout", systemImage: "cross.case")
+                    Label("Sua cau truc", systemImage: "cross.case")
                 }
                 Button { appState.reloadFeatureData() } label: {
-                    Label("Reload", systemImage: "arrow.clockwise")
+                    Label("Nap lai", systemImage: "arrow.clockwise")
                 }
             }
             List(appState.securityRows) { row in
@@ -302,45 +302,59 @@ struct MainView: View {
     private var antivirusTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                SectionHeader(title: "Antivirus", subtitle: "Scan with K3 USB heuristics and ClamAV when available")
+                SectionHeader(title: "Diet virus", subtitle: "Quet bang luat K3 USB va ClamAV neu may da cai")
                 Spacer()
-                Label(appState.antivirusEngineInfo.clamAvailable ? "ClamAV ready" : "ClamAV not found", systemImage: appState.antivirusEngineInfo.clamAvailable ? "checkmark.shield" : "exclamationmark.triangle")
+                Label(appState.antivirusEngineInfo.clamAvailable ? "ClamAV san sang" : "Chua co ClamAV", systemImage: appState.antivirusEngineInfo.clamAvailable ? "checkmark.shield" : "exclamationmark.triangle")
                     .foregroundStyle(appState.antivirusEngineInfo.clamAvailable ? .green : .orange)
                 Button {
                     appState.updateClamAVDatabase()
                 } label: {
-                    Label("Update DB", systemImage: "arrow.triangle.2.circlepath")
+                    Label("Cap nhat DB", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .disabled(!appState.antivirusEngineInfo.freshClamAvailable)
+            }
+            HStack(spacing: 10) {
+                Button { appState.scanCurrentFolder() } label: {
+                    Label("Quet thu muc dang mo", systemImage: "folder.badge.gearshape")
+                }
+                .buttonStyle(.borderedProminent)
+                Button { appState.scanBaoMat() } label: {
+                    Label("Quet BaoMat", systemImage: "shield.lefthalf.filled")
+                }
+                Button { appState.scanUsbRoot() } label: {
+                    Label("Quet USB", systemImage: "externaldrive.badge.magnifyingglass")
+                }
+                Divider()
+                    .frame(height: 24)
                 Button {
                     scanAllowsDirectories = true
                     showingScanImporter = true
                 } label: {
-                    Label("Scan Folder", systemImage: "folder.badge.gearshape")
+                    Label("Chon thu muc", systemImage: "folder.badge.gearshape")
                 }
                 Button {
                     scanAllowsDirectories = false
                     showingScanImporter = true
                 } label: {
-                    Label("Scan Files", systemImage: "doc.text.magnifyingglass")
+                    Label("Chon file", systemImage: "doc.text.magnifyingglass")
                 }
                 Button {
                     if let finding = selectedFinding { appState.quarantine(finding) }
                 } label: {
-                    Label("Quarantine", systemImage: "shippingbox")
+                    Label("Cach ly", systemImage: "shippingbox")
                 }
                 .disabled(selectedFinding?.status != "Threat")
+                Spacer()
             }
             if appState.scanFindings.isEmpty {
                 EmptyStateView(
                     icon: "magnifyingglass",
-                    title: "No scan results yet",
-                    message: "Scan a folder or individual files to see clean, trusted, and suspicious items here.",
-                    primaryTitle: "Scan Folder",
+                    title: "Chua co ket qua quet",
+                    message: "Bam Quet thu muc dang mo, Quet BaoMat, Quet USB, hoac chon file/thu muc de bat dau.",
+                    primaryTitle: "Quet thu muc dang mo",
                     primaryIcon: "folder.badge.gearshape"
                 ) {
-                    scanAllowsDirectories = true
-                    showingScanImporter = true
+                    appState.scanCurrentFolder()
                 }
             } else {
                 List(appState.scanFindings, selection: $selectedFinding) { finding in
@@ -355,7 +369,7 @@ struct MainView: View {
                                 .lineLimit(1)
                         }
                         Spacer()
-                        Text(finding.status)
+                        Text(scanStatusText(finding.status))
                             .frame(width: 80, alignment: .leading)
                         Text(finding.signature)
                             .foregroundStyle(.secondary)
@@ -371,29 +385,29 @@ struct MainView: View {
     private var quarantineTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                SectionHeader(title: "Quarantine", subtitle: "Restore or permanently remove isolated files")
+                SectionHeader(title: "Khu cach ly", subtitle: "Khoi phuc hoac xoa an toan file nghi nhiem")
                 Spacer()
                 Button { appState.refreshQuarantine() } label: {
-                    Label("Reload", systemImage: "arrow.clockwise")
+                    Label("Nap lai", systemImage: "arrow.clockwise")
                 }
                 Button {
                     if let item = selectedQuarantine { appState.restoreQuarantine(item) }
                 } label: {
-                    Label("Restore", systemImage: "arrow.uturn.backward")
+                    Label("Khoi phuc", systemImage: "arrow.uturn.backward")
                 }
                 .disabled(selectedQuarantine == nil)
                 Button(role: .destructive) {
                     if let item = selectedQuarantine { appState.deleteQuarantine(item) }
                 } label: {
-                    Label("Delete", systemImage: "trash")
+                    Label("Xoa", systemImage: "trash")
                 }
                 .disabled(selectedQuarantine == nil)
             }
             if appState.quarantineItems.isEmpty {
                 EmptyStateView(
                     icon: "shippingbox",
-                    title: "No quarantined files",
-                    message: "Threats you quarantine from the Antivirus tab will appear here with restore and delete controls."
+                    title: "Chua co file cach ly",
+                    message: "Tep nghi nhiem duoc cach ly tu tab Diet virus se hien o day."
                 )
             } else {
                 List(appState.quarantineItems, selection: $selectedQuarantine) { item in
@@ -422,27 +436,27 @@ struct MainView: View {
     private var trustedTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                SectionHeader(title: "Trusted Files", subtitle: "SHA-256 allowlist shared through .k3_trusted_hashes.txt")
+                SectionHeader(title: "Tep tin cay", subtitle: "Danh sach SHA-256 dung chung trong .k3_trusted_hashes.txt")
                 Spacer()
                 Button { showingTrustImporter = true } label: {
-                    Label("Add Files", systemImage: "plus")
+                    Label("Them file", systemImage: "plus")
                 }
                 Button(role: .destructive) {
                     if let entry = selectedTrusted { appState.removeTrusted(entry) }
                 } label: {
-                    Label("Remove", systemImage: "minus.circle")
+                    Label("Xoa", systemImage: "minus.circle")
                 }
                 .disabled(selectedTrusted == nil)
                 Button { appState.refreshTrustedFiles() } label: {
-                    Label("Reload", systemImage: "arrow.clockwise")
+                    Label("Nap lai", systemImage: "arrow.clockwise")
                 }
             }
             if appState.trustedFiles.isEmpty {
                 EmptyStateView(
                     icon: "checkmark.seal",
-                    title: "No trusted files",
-                    message: "Add known-good tools or installers to prevent scanner false positives by SHA-256.",
-                    primaryTitle: "Add Trusted Files",
+                    title: "Chua co file tin cay",
+                    message: "Them cong cu/bo cai dat hop le de tranh bi bao nham, dua tren SHA-256.",
+                    primaryTitle: "Them file tin cay",
                     primaryIcon: "plus"
                 ) {
                     showingTrustImporter = true
@@ -470,27 +484,27 @@ struct MainView: View {
     private var historyTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                SectionHeader(title: "History", subtitle: "Recent K3 activity on this Mac volume")
+                SectionHeader(title: "Nhat ky", subtitle: "Cac hoat dong gan day cua K3 tren volume nay")
                 Spacer()
                 Button { appState.refreshHistory() } label: {
-                    Label("Reload", systemImage: "arrow.clockwise")
+                    Label("Nap lai", systemImage: "arrow.clockwise")
                 }
                 Button(role: .destructive) { appState.clearHistory() } label: {
-                    Label("Clear", systemImage: "trash")
+                    Label("Xoa", systemImage: "trash")
                 }
             }
             if appState.historyEntries.isEmpty {
                 EmptyStateView(
                     icon: "clock.arrow.circlepath",
-                    title: "No history yet",
-                    message: "Login, encryption, scan, quarantine, and maintenance actions will be recorded here."
+                    title: "Chua co nhat ky",
+                    message: "Dang nhap, ma hoa, quet virus, cach ly va bao tri se duoc ghi tai day."
                 )
             } else {
                 List(appState.historyEntries) { entry in
                     HStack {
                         Text(entry.timestamp)
                             .frame(width: 150, alignment: .leading)
-                        Text(entry.level)
+                        Text(historyLevelText(entry.level))
                             .frame(width: 70, alignment: .leading)
                         Text(entry.message)
                         Spacer()
@@ -509,20 +523,20 @@ struct MainView: View {
 
     private var maintenanceTab: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "Maintenance Tools", subtitle: "macOS-safe equivalents for USB repair and cleanup")
+            SectionHeader(title: "Cong cu bao tri", subtitle: "Cac thao tac sua loi/don dep an toan cho macOS")
             Button { appState.cleanupMacMetadata() } label: {
-                Label("Clean macOS Metadata", systemImage: "sparkles")
+                Label("Don metadata macOS", systemImage: "sparkles")
             }
             Button { appState.verifyVolume() } label: {
-                Label("Verify Volume", systemImage: "externaldrive.badge.checkmark")
+                Label("Kiem tra volume", systemImage: "externaldrive.badge.checkmark")
             }
             Button { appState.repairPortableLayout() } label: {
-                Label("Repair Portable Layout", systemImage: "bandage")
+                Label("Sua cau truc portable", systemImage: "bandage")
             }
             Divider()
-            Text("Autorun is not available on macOS. Use this app binary directly from the USB or ISO volume.")
+            Text("macOS khong cho tu dong chay USB autorun. Hay chay truc tiep file app tren USB/ISO.")
                 .foregroundStyle(.secondary)
-            Text("CHKDSK and DiskPart are Windows-only. This build uses diskutil verifyVolume and portable layout repair.")
+            Text("CHKDSK va DiskPart chi co tren Windows. Ban macOS dung diskutil verifyVolume va sua cau truc portable.")
                 .foregroundStyle(.secondary)
             Spacer()
         }
@@ -537,7 +551,7 @@ struct MainView: View {
             Text(appState.statusMessage)
                 .font(.caption)
             Spacer()
-            Text("\(appState.vaultFiles.count) encrypted | \(appState.quarantineItems.count) quarantined | \(appState.trustedFiles.count) trusted | auto \(appState.autoEncryptActive ? "on" : "off")")
+            Text("\(appState.vaultFiles.count) ma hoa | \(appState.quarantineItems.count) cach ly | \(appState.trustedFiles.count) tin cay | tu dong \(appState.autoEncryptActive ? "bat" : "tat")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -547,15 +561,15 @@ struct MainView: View {
 
 private struct NewNoteSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var title = "Secure Note"
+    @State private var title = "Ghi chu bao mat"
     @State private var content = ""
     let onSave: (String, String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("New Secure Note")
+            Text("Ghi chu bao mat moi")
                 .font(.title3.bold())
-            TextField("File name", text: $title)
+            TextField("Ten file", text: $title)
                 .textFieldStyle(.roundedBorder)
             TextEditor(text: $content)
                 .font(.body)
@@ -566,12 +580,12 @@ private struct NewNoteSheet: View {
                 }
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Huy") { dismiss() }
                 Button {
                     onSave(title, content)
                     dismiss()
                 } label: {
-                    Label("Encrypt Note", systemImage: "lock.doc")
+                    Label("Ma hoa ghi chu", systemImage: "lock.doc")
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -621,7 +635,7 @@ private struct LocalFileRow: View {
             }
             Spacer()
             if item.isDirectory {
-                Text("Folder")
+                Text("Thu muc")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -649,6 +663,30 @@ private struct MetricPill: View {
         .padding(.vertical, 8)
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private func scanStatusText(_ status: String) -> String {
+    switch status {
+    case "Threat":
+        return "Nguy hiem"
+    case "Trusted":
+        return "Tin cay"
+    case "Clean":
+        return "Sach"
+    default:
+        return status
+    }
+}
+
+private func historyLevelText(_ level: String) -> String {
+    switch level {
+    case "INFO":
+        return "Thong tin"
+    case "WARN":
+        return "Canh bao"
+    default:
+        return level
     }
 }
 
@@ -746,40 +784,40 @@ private struct SettingsPane: View {
 
     var body: some View {
         Form {
-            Section("Passwords") {
-                SecureField("New real password", text: $realPassword)
-                SecureField("New decoy password", text: $decoyPassword)
+            Section("Mat khau") {
+                SecureField("Mat khau that moi", text: $realPassword)
+                SecureField("Mat khau gia moi", text: $decoyPassword)
                 Button {
                     appState.changePasswords(realPassword: realPassword, decoyPassword: decoyPassword)
                     realPassword = ""
                     decoyPassword = ""
                 } label: {
-                    Label("Save Passwords", systemImage: "key")
+                    Label("Luu mat khau", systemImage: "key")
                 }
             }
 
-            Section("Login") {
-                TextField("Login title", text: $loginTitle)
-                TextField("Help text", text: $loginHelp)
-                Toggle("Hide login help", isOn: $hideLoginHelp)
+            Section("Dang nhap") {
+                TextField("Tieu de dang nhap", text: $loginTitle)
+                TextField("Noi dung tro giup", text: $loginHelp)
+                Toggle("An tro giup dang nhap", isOn: $hideLoginHelp)
             }
 
-            Section("General") {
-                Picker("Auto encrypt folder", selection: $autoEncryptFolder) {
+            Section("Cai dat chung") {
+                Picker("Thu muc tu dong ma hoa", selection: $autoEncryptFolder) {
                     Text("BaoMat").tag("BaoMat")
-                    Text("Whole USB").tag("Toan bo USB")
-                    Text("Off").tag("")
+                    Text("Toan bo USB").tag("Toan bo USB")
+                    Text("Tat").tag("")
                 }
-                Picker("Max encrypt size", selection: $maxSizeBytes) {
-                    Text("No limit").tag("-1")
+                Picker("Dung luong ma hoa toi da", selection: $maxSizeBytes) {
+                    Text("Khong gioi han").tag("-1")
                     Text("1 GB").tag("\(1 * 1024 * 1024 * 1024)")
                     Text("2 GB").tag("\(2 * 1024 * 1024 * 1024)")
                     Text("4 GB").tag("\(4 * 1024 * 1024 * 1024)")
                 }
-                Toggle("Auto decrypt when copying out", isOn: $autoDecrypt)
-                Toggle("Show hidden files", isOn: $showHidden)
-                Toggle("Clear K3 history on exit", isOn: $wipeHistory)
-                Toggle("Clean macOS metadata on exit", isOn: $wipeMacos)
+                Toggle("Tu dong giai ma khi dua ra may", isOn: $autoDecrypt)
+                Toggle("Hien file an", isOn: $showHidden)
+                Toggle("Xoa nhat ky K3 khi thoat", isOn: $wipeHistory)
+                Toggle("Don metadata macOS khi thoat", isOn: $wipeMacos)
             }
 
             Button {
@@ -795,7 +833,7 @@ private struct SettingsPane: View {
                     wipeMacos: wipeMacos
                 )
             } label: {
-                Label("Save Settings", systemImage: "square.and.arrow.down")
+                Label("Luu cai dat", systemImage: "square.and.arrow.down")
             }
         }
         .onAppear {
