@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "nameRules": [
+    {
+      "id": "K3.USB.FolderImpersonator",
+      "extensions": ["exe", "scr", "com"],
+      "exactNames": ["folder.exe", "new folder.exe", "my documents.exe", "documents.exe", "pictures.exe"],
+      "suffixes": [".pdf.exe", ".doc.exe", ".docx.exe", ".xls.exe", ".xlsx.exe", ".jpg.exe", ".png.exe", ".txt.exe", ".zip.exe"]
+    },
+    {
+      "id": "K3.USB.RiskyScriptOrShortcut",
+      "extensions": ["bat", "cmd", "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "ps1", "lnk", "reg", "scf", "url", "command"]
+    }
+  ],
+  "contentRules": [
+    {
+      "id": "K3.Test.EICAR",
+      "maxBytes": 2097152,
+      "any": ["EICAR-STANDARD-ANTIVIRUS-TEST-FILE"]
+    },
+    {
+      "id": "K3.Script.EncodedPowerShell",
+      "extensions": ["bat", "cmd", "ps1", "vbs", "js", "hta", "txt"],
+      "maxBytes": 2097152,
+      "any": ["powershell -enc", "powershell.exe -enc", "-encodedcommand", "frombase64string"]
+    },
+    {
+      "id": "K3.Script.DownloadAndExecute",
+      "extensions": ["sh", "command", "bat", "cmd", "ps1", "js", "vbs", "hta", "txt"],
+      "maxBytes": 2097152,
+      "all": ["|"],
+      "any": ["curl ", "wget ", "invoke-webrequest", "downloadstring("]
+    },
+    {
+      "id": "K3.Mac.PersistenceLaunchAgent",
+      "extensions": ["sh", "command", "plist", "txt"],
+      "maxBytes": 2097152,
+      "any": ["launchctl load", "/library/launchagents", "~/library/launchagents"]
+    },
+    {
+      "id": "K3.USB.HideAndShortcut",
+      "extensions": ["bat", "cmd", "vbs", "js", "ps1", "txt"],
+      "maxBytes": 2097152,
+      "all": ["attrib +h"],
+      "any": [".lnk", "shortcut", "system volume information"]
+    }
+  ]
+}

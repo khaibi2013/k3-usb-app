@@ -34,6 +34,7 @@ final class AppState: ObservableObject {
         do {
             config = try K3ConfigStore.loadOrCreate(at: usbRoot)
             try K3PortableLayout.ensure(at: usbRoot)
+            K3MacScanner.ensurePortableLayout(at: usbRoot)
             try K3PortableLayout.hideSupportFiles(at: usbRoot)
             reloadFeatureData()
             loadLocalBrowser(at: usbRoot)
@@ -112,7 +113,7 @@ final class AppState: ObservableObject {
                     encryptedCount += 1
                     continue
                 }
-                let scan = K3MacScanner.scan(file)
+                let scan = K3MacScanner.scan(file, root: usbRoot)
                 if scan.isThreat {
                     statusMessage = "Da chan: \(file.lastPathComponent) - \(scan.name)"
                     scanFindings.append(ScanFinding(url: file, status: "Threat", signature: scan.name))
@@ -281,7 +282,8 @@ final class AppState: ObservableObject {
     }
 
     func reloadFeatureData() {
-        antivirusEngineInfo = K3MacScanner.engineInfo()
+        K3MacScanner.ensurePortableLayout(at: usbRoot)
+        antivirusEngineInfo = K3MacScanner.engineInfo(root: usbRoot)
         refreshTrustedFiles()
         refreshQuarantine()
         refreshHistory()
@@ -304,7 +306,7 @@ final class AppState: ObservableObject {
                     findings.append(ScanFinding(url: file, status: "Trusted", signature: "Danh sach tin cay SHA-256"))
                     continue
                 }
-                let result = K3MacScanner.scan(file)
+                let result = K3MacScanner.scan(file, root: usbRoot)
                 findings.append(ScanFinding(url: file, status: result.isThreat ? "Threat" : "Clean", signature: result.name))
             }
         }
@@ -335,10 +337,10 @@ final class AppState: ObservableObject {
 
     func updateClamAVDatabase() {
         do {
-            let output = try K3MacScanner.updateClamAVDatabase()
+            let output = try K3MacScanner.updateClamAVDatabase(root: usbRoot)
             statusMessage = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? "Da cap nhat CSDL ClamAV."
             K3HistoryManager.append("INFO", "Da cap nhat CSDL ClamAV", root: usbRoot)
-            antivirusEngineInfo = K3MacScanner.engineInfo()
+            antivirusEngineInfo = K3MacScanner.engineInfo(root: usbRoot)
             refreshHistory()
         } catch {
             statusMessage = "Cap nhat ClamAV that bai: \(error.localizedDescription)"
@@ -588,7 +590,8 @@ final class AppState: ObservableObject {
             SecurityRow(name: "Khu cach ly", status: "\(quarantineItems.count) muc", suggestion: ".k3_quarantine"),
             SecurityRow(name: "Snapshot phuc hoi", status: exists(K3RecoverySnapshotManager.snapshotRoot(at: usbRoot)) ? "Da bat" : "Chua co", suggestion: ".k3_recovery_snapshots"),
             SecurityRow(name: "Tu dong ma hoa", status: autoEncryptActive ? "Dang theo doi" : "Tat", suggestion: config.autoEncryptFolder.isEmpty ? "Tat trong cai dat" : config.autoEncryptFolder),
-            SecurityRow(name: "ClamAV", status: antivirusEngineInfo.clamAvailable ? "Co san" : "Chua cai", suggestion: antivirusEngineInfo.clamScanPath ?? "Cai ClamAV de quet chu ky"),
+            SecurityRow(name: "Rule portable", status: K3MacScanner.portableRulesStatus(root: usbRoot), suggestion: "tools/rules/k3-rules.json"),
+            SecurityRow(name: "ClamAV", status: antivirusEngineInfo.clamAvailable ? "Co san" : "Chua cai", suggestion: antivirusEngineInfo.clamScanPath ?? "Dat ClamAV vao tools/mac-arm64 hoac tools/mac-x64"),
             SecurityRow(name: "File ma hoa", status: "\(vaultFiles.count) muc", suggestion: isDecoyMode ? "Che do ket gia" : "Ket that")
         ]
     }

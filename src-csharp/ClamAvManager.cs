@@ -33,6 +33,7 @@ namespace AnToanUSB
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             string[] candidates = {
+                Path.Combine(baseDir, @"tools\windows\clamav\clamscan.exe"),
                 Path.Combine(baseDir, @"tools\clamav\clamscan.exe"),
                 Path.Combine(baseDir, @"clamav\clamscan.exe"),
                 @"C:\Program Files\ClamAV\clamscan.exe",
@@ -60,6 +61,7 @@ namespace AnToanUSB
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             string[] candidates = {
+                Path.Combine(baseDir, @"tools\windows\clamav\freshclam.exe"),
                 Path.Combine(baseDir, @"tools\clamav\freshclam.exe"),
                 Path.Combine(baseDir, @"clamav\freshclam.exe"),
                 @"C:\Program Files\ClamAV\freshclam.exe",

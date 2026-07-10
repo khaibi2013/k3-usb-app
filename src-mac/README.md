@@ -43,7 +43,9 @@ src-mac/.build/release/K3UsbSafeMac
 - Security Center with portable layout status and vault integrity verification.
 - Antivirus scan UI using K3 USB heuristics plus optional ClamAV if `clamscan` exists.
 - YARA-like built-in script/content rules for USB malware patterns, EICAR test detection, downloader scripts, macOS persistence hints, and Office/media decoy names.
+- Portable rule loading from `tools/rules/k3-rules.json`, so USB rules can be updated without rebuilding the app.
 - ClamAV database update button when `freshclam` exists.
+- Portable ClamAV lookup under `tools/mac-arm64/clamav` or `tools/mac-x64/clamav`, with fallback to Homebrew/system ClamAV.
 - Quarantine manager with restore and permanent delete.
 - Secure shred for quarantined deletes and auto-encrypted source cleanup.
 - Recovery snapshots before antivirus scans in `.k3_recovery_snapshots`.
@@ -61,4 +63,4 @@ src-mac/.build/release/K3UsbSafeMac
 - Windows-only features such as Registry history cleanup, CHKDSK, DiskPart read-only mode, and `autorun.inf` auto-run do not exist on macOS.
 - macOS does not allow USB autorun for security reasons.
 - The macOS build provides equivalent maintenance actions where possible: portable layout repair, `.DS_Store`/`._*` cleanup, and `diskutil verifyVolume`.
-- To use ClamAV on macOS, install it with Homebrew or place `clamscan` on `PATH`.
+- To use ClamAV on macOS, place the matching portable build under `tools/mac-arm64/clamav` or `tools/mac-x64/clamav`, or install it with Homebrew.
