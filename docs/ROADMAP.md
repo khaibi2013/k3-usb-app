@@ -46,7 +46,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 - [x] Drag and drop encrypt/decrypt.
 - [ ] Vietnamese and English localization.
 - [ ] Friendlier empty states and warnings.
-- [ ] Better progress indicator for long scan/encrypt operations.
+- [x] Better progress indicator for long scan/encrypt operations.
 
 ## Important Architecture Notes
 

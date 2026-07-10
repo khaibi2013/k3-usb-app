@@ -778,8 +778,16 @@ struct MainView: View {
             Circle()
                 .fill(appState.isAuthenticated ? .green : .red)
                 .frame(width: 10, height: 10)
-            Text(appState.statusMessage)
-                .font(.caption)
+            if appState.isBusy {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 18)
+                Text(appState.progressMessage.isEmpty ? appState.statusMessage : appState.progressMessage)
+                    .font(.caption)
+            } else {
+                Text(appState.statusMessage)
+                    .font(.caption)
+            }
             Spacer()
             Text("\(appState.vaultFiles.count) ma hoa | \(appState.quarantineItems.count) cach ly | \(appState.trustedFiles.count) tin cay | tu dong \(appState.autoEncryptActive ? "bat" : "tat")")
                 .font(.caption)

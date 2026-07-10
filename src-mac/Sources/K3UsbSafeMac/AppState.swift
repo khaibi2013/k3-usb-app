@@ -20,6 +20,8 @@ final class AppState: ObservableObject {
     @Published var autoEncryptActive = false
     @Published var lastScanSummary = "Chua quet"
     @Published var lastScanDate: Date?
+    @Published var isBusy = false
+    @Published var progressMessage = ""
 
     private var crypto: K3Crypto?
     private var autoEncryptTimer: Timer?
@@ -197,8 +199,15 @@ final class AppState: ObservableObject {
     func encryptIntoVault(files: [URL], removeOriginal: Bool = false) {
         guard let crypto else { return }
         do {
+            isBusy = true
+            progressMessage = "Dang ma hoa..."
+            defer {
+                isBusy = false
+                progressMessage = ""
+            }
             var encryptedCount = 0
-            for file in files {
+            for (index, file) in files.enumerated() {
+                progressMessage = "Ma hoa \(index + 1)/\(files.count): \(file.lastPathComponent)"
                 if K3TrustedFileManager.isTrusted(file, root: usbRoot) {
                     K3HistoryManager.append("INFO", "File tin cay bo qua quet: \(file.lastPathComponent)", root: usbRoot)
                     try K3Vault.encrypt(file: file, into: vaultURL, crypto: crypto)
@@ -370,6 +379,12 @@ final class AppState: ObservableObject {
     private func encryptFolderIntoVault(folder: URL, removeOriginal: Bool) {
         guard let crypto else { return }
         do {
+            isBusy = true
+            progressMessage = "Dang ma hoa thu muc..."
+            defer {
+                isBusy = false
+                progressMessage = ""
+            }
             let didAccessFolder = folder.startAccessingSecurityScopedResource()
             defer {
                 if didAccessFolder {
@@ -384,8 +399,9 @@ final class AppState: ObservableObject {
             }
 
             var encryptedCount = 0
-            for file in files {
+            for (index, file) in files.enumerated() {
                 let storedName = try K3Vault.storedName(for: file, inside: folder, includeRootFolder: true)
+                progressMessage = "Ma hoa \(index + 1)/\(files.count): \(storedName)"
                 if !K3TrustedFileManager.isTrusted(file, root: usbRoot) {
                     let scan = K3MacScanner.scan(file, root: usbRoot)
                     if scan.isThreat {
@@ -470,6 +486,12 @@ final class AppState: ObservableObject {
     }
 
     func scan(urls: [URL], createSnapshot: Bool = true) {
+        isBusy = true
+        progressMessage = "Dang quet..."
+        defer {
+            isBusy = false
+            progressMessage = ""
+        }
         var findings: [ScanFinding] = []
         if createSnapshot, let snapshot = try? K3RecoverySnapshotManager.createSnapshot(for: urls, root: usbRoot) {
             K3HistoryManager.append("INFO", "Da tao snapshot phuc hoi: \(snapshot.fileCount) file, \(snapshot.bytes / 1024) KB", root: usbRoot)
@@ -480,7 +502,8 @@ final class AppState: ObservableObject {
                 if didAccess { url.stopAccessingSecurityScopedResource() }
             }
             let files = scanFiles(at: url)
-            for file in files {
+            for (index, file) in files.enumerated() {
+                progressMessage = "Quet \(index + 1)/\(files.count): \(file.lastPathComponent)"
                 if K3TrustedFileManager.isTrusted(file, root: usbRoot) {
                     findings.append(ScanFinding(url: file, status: "Trusted", signature: "Danh sach tin cay SHA-256"))
                     continue
