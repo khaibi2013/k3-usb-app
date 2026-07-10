@@ -26,6 +26,7 @@ release/
 out/
 build/
 dist-electron/
+src-mac/.build/
 
 # K3 USB runtime data
 src-csharp/AnToanUSB.exe
