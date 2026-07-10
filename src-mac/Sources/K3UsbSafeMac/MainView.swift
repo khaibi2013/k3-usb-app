@@ -10,10 +10,10 @@ struct MainView: View {
     @State private var selectedTrusted: TrustedFileEntry?
     @State private var showingImporter = false
     @State private var showingDecryptFolder = false
-    @State private var showingScanImporter = false
+    @State private var showingScanFolderImporter = false
+    @State private var showingScanFileImporter = false
     @State private var showingTrustImporter = false
     @State private var showingNewNote = false
-    @State private var scanAllowsDirectories = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,7 +51,12 @@ struct MainView: View {
                 appState.decrypt(item, to: folder)
             }
         }
-        .fileImporter(isPresented: $showingScanImporter, allowedContentTypes: scanAllowsDirectories ? [.folder, .item] : [.item], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $showingScanFolderImporter, allowedContentTypes: [.folder], allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result {
+                appState.scan(urls: urls)
+            }
+        }
+        .fileImporter(isPresented: $showingScanFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
                 appState.scan(urls: urls)
             }
@@ -320,14 +325,12 @@ struct MainView: View {
                 Divider()
                     .frame(height: 24)
                 Button {
-                    scanAllowsDirectories = true
-                    showingScanImporter = true
+                    showingScanFolderImporter = true
                 } label: {
                     Label("Chon thu muc", systemImage: "folder.badge.gearshape")
                 }
                 Button {
-                    scanAllowsDirectories = false
-                    showingScanImporter = true
+                    showingScanFileImporter = true
                 } label: {
                     Label("Chon file", systemImage: "doc.text.magnifyingglass")
                 }
