@@ -16,9 +16,8 @@ struct LoginView: View {
 
     var body: some View {
         VStack(spacing: 22) {
-            Image(systemName: "externaldrive.badge.shield.checkmark")
-                .font(.system(size: 62))
-                .foregroundStyle(.teal)
+            K3LogoView(size: 82, cornerRadius: 16)
+                .shadow(color: .teal.opacity(0.18), radius: 14, y: 6)
 
             Text(appState.config.loginTitle)
                 .font(.title2.bold())

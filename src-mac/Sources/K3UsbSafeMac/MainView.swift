@@ -71,14 +71,7 @@ struct MainView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(appState.isDecoyMode ? Color.orange.opacity(0.15) : Color.teal.opacity(0.15))
-                Image(systemName: appState.isDecoyMode ? "theatermasks.fill" : "lock.shield.fill")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(appState.isDecoyMode ? .orange : .teal)
-            }
-            .frame(width: 46, height: 46)
+            K3LogoView(size: 52, cornerRadius: 10)
             VStack(alignment: .leading, spacing: 2) {
                 Text(appState.isDecoyMode ? "Ket gia" : "USB An Toan K3")
                     .font(.title3.bold())

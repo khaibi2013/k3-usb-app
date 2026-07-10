@@ -12,6 +12,9 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "K3UsbSafeMac",
+            resources: [
+                .process("Resources")
+            ],
             linkerSettings: [
                 .linkedFramework("Security")
             ]
