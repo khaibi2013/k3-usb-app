@@ -548,27 +548,65 @@ struct MainView: View {
                     message: "Tep nghi nhiem duoc cach ly tu tab Diet virus se hien o day."
                 )
             } else {
-                List(appState.quarantineItems, selection: $selectedQuarantine) { item in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(item.originalName)
-                            Text(item.originalPath)
-                                .font(.caption)
+                HSplitView {
+                    List(appState.quarantineItems, selection: $selectedQuarantine) { item in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(item.originalName)
+                                Text(item.originalPath)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Text(item.virusName)
+                                .frame(width: 200, alignment: .leading)
+                            Text(item.quarantineDate)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                                .frame(width: 150, alignment: .leading)
                         }
-                        Spacer()
-                        Text(item.virusName)
-                            .frame(width: 200, alignment: .leading)
-                        Text(item.quarantineDate)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 150, alignment: .leading)
+                        .tag(item)
                     }
-                    .tag(item)
+                    quarantineDetailPane
+                        .frame(minWidth: 340, idealWidth: 420)
                 }
             }
         }
         .padding(16)
+    }
+
+    private var quarantineDetailPane: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Chi tiet cach ly", subtitle: "Kiem tra truoc khi khoi phuc hoac dua vao tin cay")
+            if let item = selectedQuarantine {
+                DetailLine(label: "Ten file", value: item.originalName)
+                DetailLine(label: "Duong dan goc", value: item.originalPath)
+                DetailLine(label: "Nhan dien", value: item.virusName)
+                DetailLine(label: "Ngay cach ly", value: item.quarantineDate)
+                DetailLine(label: "Dung luong", value: ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file))
+                DetailLine(label: "SHA-256", value: K3TrustedFileManager.sha256(item.quarantinedURL) ?? "Khong doc duoc")
+                Divider()
+                HStack {
+                    Button { appState.restoreQuarantine(item) } label: {
+                        Label("Khoi phuc", systemImage: "arrow.uturn.backward")
+                    }
+                    Button { appState.trustQuarantineAndRestore(item) } label: {
+                        Label("Tin cay & khoi phuc", systemImage: "checkmark.seal")
+                    }
+                }
+                Button(role: .destructive) { appState.deleteQuarantine(item) } label: {
+                    Label("Xoa vinh vien", systemImage: "trash")
+                }
+                Spacer()
+            } else {
+                EmptyStateView(
+                    icon: "shippingbox",
+                    title: "Chon mot file",
+                    message: "Chi tiet cach ly va hash se hien o day."
+                )
+            }
+        }
+        .padding(.leading, 12)
     }
 
     private var trustedTab: some View {
@@ -804,6 +842,23 @@ private struct MetricPill: View {
         .padding(.vertical, 8)
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct DetailLine: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(label == "SHA-256" ? .system(.caption, design: .monospaced) : .body)
+                .textSelection(.enabled)
+                .lineLimit(3)
+        }
     }
 }
 

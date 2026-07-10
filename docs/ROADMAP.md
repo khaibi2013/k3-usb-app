@@ -25,7 +25,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 ## Phase 3 - Antivirus And Safety
 
 - [x] Auto scan on login/start.
-- [ ] Strong quarantine detail view.
+- [x] Strong quarantine detail view.
 - [x] Restore quarantine to original path.
 - [x] Trust from quarantine.
 - [x] K3 rule updater from URL/file.
