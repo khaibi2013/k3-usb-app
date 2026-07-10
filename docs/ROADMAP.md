@@ -45,7 +45,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 - [x] First-run wizard.
 - [x] Drag and drop encrypt/decrypt.
 - [ ] Vietnamese and English localization.
-- [ ] Friendlier empty states and warnings.
+- [x] Friendlier empty states and warnings.
 - [x] Better progress indicator for long scan/encrypt operations.
 
 ## Important Architecture Notes

@@ -1113,6 +1113,7 @@ private struct SettingsPane: View {
     @State private var autoScanOnLogin = false
     @State private var selfDestructMode = "wipe_all"
     @State private var k3RuleUpdateURL = ""
+    @State private var showingDestructivePolicyAlert = false
 
     var body: some View {
         Form {
@@ -1202,23 +1203,22 @@ private struct SettingsPane: View {
             }
 
             Button {
-                appState.saveSettings(
-                    loginTitle: loginTitle,
-                    loginHelp: loginHelp,
-                    hideLoginHelp: hideLoginHelp,
-                    autoEncryptFolder: autoEncryptFolder,
-                    maxSizeBytes: maxSizeBytes,
-                    autoDecrypt: autoDecrypt,
-                    showHidden: showHidden,
-                    wipeHistory: wipeHistory,
-                    wipeMacos: wipeMacos,
-                    autoScanOnLogin: autoScanOnLogin,
-                    selfDestructMode: selfDestructMode,
-                    k3RuleUpdateURL: k3RuleUpdateURL
-                )
+                if isDestructiveSelfDestructMode, selfDestructMode != appState.config.selfDestructMode {
+                    showingDestructivePolicyAlert = true
+                } else {
+                    saveSettings()
+                }
             } label: {
                 Label("Luu cai dat", systemImage: "square.and.arrow.down")
             }
+        }
+        .alert("Xac nhan chinh sach tu huy", isPresented: $showingDestructivePolicyAlert) {
+            Button("Huy", role: .cancel) {}
+            Button("Toi hieu, van luu", role: .destructive) {
+                saveSettings()
+            }
+        } message: {
+            Text("Lua chon nay co the xoa du lieu that trong ket khi nhap sai 10 lan. Hay chac chan da co backup va recovery plan truoc khi bat.")
         }
         .onAppear {
             loginTitle = appState.config.loginTitle
@@ -1234,5 +1234,26 @@ private struct SettingsPane: View {
             selfDestructMode = appState.config.selfDestructMode
             k3RuleUpdateURL = appState.config.k3RuleUpdateURL
         }
+    }
+
+    private var isDestructiveSelfDestructMode: Bool {
+        selfDestructMode == "wipe_real" || selfDestructMode == "wipe_all"
+    }
+
+    private func saveSettings() {
+        appState.saveSettings(
+            loginTitle: loginTitle,
+            loginHelp: loginHelp,
+            hideLoginHelp: hideLoginHelp,
+            autoEncryptFolder: autoEncryptFolder,
+            maxSizeBytes: maxSizeBytes,
+            autoDecrypt: autoDecrypt,
+            showHidden: showHidden,
+            wipeHistory: wipeHistory,
+            wipeMacos: wipeMacos,
+            autoScanOnLogin: autoScanOnLogin,
+            selfDestructMode: selfDestructMode,
+            k3RuleUpdateURL: k3RuleUpdateURL
+        )
     }
 }
