@@ -12,7 +12,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 - [x] Scan report HTML.
 - [x] Dashboard tong quan dung luong/lan quet/file ket.
 - [x] USB vaccine co nut rieng.
-- [ ] Release builder script.
+- [x] Release builder script.
 
 ## Phase 2 - Data Security
 

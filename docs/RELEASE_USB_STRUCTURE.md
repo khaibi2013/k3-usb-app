@@ -61,6 +61,14 @@ tools/
 
 ## Manual Update Steps
 
+Quick release from macOS:
+
+```bash
+scripts/build-release-usb-mac.sh --usb /Volumes/USB-DATA
+```
+
+This builds `src-mac`, refreshes `K3 Mac.app`, `mac/K3UsbSafeMac`, `Chay_Mac.command`, README, and K3 rules. It does not delete `.vault`, `.vault_decoy`, `.vault_config.json`, quarantine, history, or existing ClamAV portable tools on the USB.
+
 1. Build macOS:
 
 ```bash
