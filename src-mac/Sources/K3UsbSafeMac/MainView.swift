@@ -14,6 +14,8 @@ struct MainView: View {
     @State private var showingTrustImporter = false
     @State private var showingRuleImporter = false
     @State private var showingNewNote = false
+    @State private var isLocalDropTarget = false
+    @State private var isVaultDropTarget = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -278,9 +280,17 @@ struct MainView: View {
                         .tag(item)
                         .onTapGesture(count: 2) {
                             appState.openLocalItem(item)
-                        }
+                    }
                 }
             }
+        }
+        .padding(6)
+        .background(isLocalDropTarget ? Color.blue.opacity(0.08) : Color.clear)
+        .onDrop(of: [.fileURL], isTargeted: $isLocalDropTarget) { providers in
+            loadDroppedFileURLs(from: providers) { urls in
+                appState.decryptDroppedVaultURLs(urls)
+            }
+            return true
         }
     }
 
@@ -349,8 +359,19 @@ struct MainView: View {
                 List(appState.vaultFiles, selection: $selectedItem) { item in
                     VaultRow(item: item)
                         .tag(item)
+                        .onDrag {
+                            NSItemProvider(object: item.url as NSURL)
+                        }
                 }
             }
+        }
+        .padding(6)
+        .background(isVaultDropTarget ? Color.teal.opacity(0.08) : Color.clear)
+        .onDrop(of: [.fileURL], isTargeted: $isVaultDropTarget) { providers in
+            loadDroppedFileURLs(from: providers) { urls in
+                appState.encryptDroppedURLs(urls)
+            }
+            return true
         }
     }
 
@@ -883,6 +904,39 @@ private func historyLevelText(_ level: String) -> String {
         return "Canh bao"
     default:
         return level
+    }
+}
+
+private func loadDroppedFileURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
+    let group = DispatchGroup()
+    var urls: [URL] = []
+    let lock = NSLock()
+
+    for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+        group.enter()
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            defer { group.leave() }
+            let url: URL?
+            if let data = item as? Data,
+               let text = String(data: data, encoding: .utf8) {
+                url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines))
+            } else if let nsURL = item as? NSURL {
+                url = nsURL as URL
+            } else if let value = item as? URL {
+                url = value
+            } else {
+                url = nil
+            }
+            if let url {
+                lock.lock()
+                urls.append(url)
+                lock.unlock()
+            }
+        }
+    }
+
+    group.notify(queue: .main) {
+        completion(urls)
     }
 }
 

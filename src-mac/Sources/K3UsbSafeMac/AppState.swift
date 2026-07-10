@@ -285,6 +285,38 @@ final class AppState: ObservableObject {
         }
     }
 
+    func encryptDroppedURLs(_ urls: [URL]) {
+        for url in urls {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { continue }
+            if isDirectory.boolValue {
+                encryptFolderIntoVault(folder: url, removeOriginal: false)
+            } else {
+                encryptIntoVault(files: [url], removeOriginal: false)
+            }
+        }
+    }
+
+    func decryptDroppedVaultURLs(_ urls: [URL]) {
+        guard let crypto else { return }
+        var decryptedCount = 0
+        for url in urls where url.pathExtension.lowercased() == "k3enc" {
+            do {
+                try K3Vault.decrypt(file: url, to: browserURL, crypto: crypto)
+                decryptedCount += 1
+            } catch {
+                statusMessage = "Giai ma keo tha that bai: \(error.localizedDescription)"
+                return
+            }
+        }
+        if decryptedCount > 0 {
+            statusMessage = "Da giai ma \(decryptedCount) file vao \(browserURL.lastPathComponent)."
+            K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
+            loadLocalBrowser(at: browserURL)
+            refreshHistory()
+        }
+    }
+
     func decryptVaultSelectionToBrowser(_ item: VaultItem?) {
         guard let item else {
             statusMessage = "Hay chon file ma hoa de dua ra khoi ket."
