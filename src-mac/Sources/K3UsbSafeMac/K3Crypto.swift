@@ -70,7 +70,8 @@ final class K3Crypto {
     }
 
     private static func aesCBC(data: Data, key: Data, iv: Data, operation: CCOperation) throws -> Data {
-        var output = Data(repeating: 0, count: data.count + kCCBlockSizeAES128)
+        let outputCapacity = data.count + kCCBlockSizeAES128
+        var output = Data(repeating: 0, count: outputCapacity)
         var outputLength = 0
         let status = output.withUnsafeMutableBytes { outputBytes in
             data.withUnsafeBytes { dataBytes in
@@ -86,7 +87,7 @@ final class K3Crypto {
                             dataBytes.baseAddress,
                             data.count,
                             outputBytes.baseAddress,
-                            output.count,
+                            outputCapacity,
                             &outputLength
                         )
                     }
@@ -132,27 +133,42 @@ final class K3Crypto {
     }
 
     private static func runGzip(arguments: [String], input: Data) throws -> Data {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: temporaryDirectory)
+        }
+
+        let inputURL = temporaryDirectory.appendingPathComponent("input.bin")
+        let outputURL = temporaryDirectory.appendingPathComponent("output.gz")
+        try input.write(to: inputURL, options: .atomic)
+        FileManager.default.createFile(atPath: outputURL.path, contents: nil)
+
+        guard let outputHandle = try? FileHandle(forWritingTo: outputURL) else {
+            throw K3Error.userFacing("Cannot prepare gzip output.")
+        }
+        defer {
+            try? outputHandle.close()
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
-        process.arguments = arguments
+        process.arguments = arguments + [inputURL.path]
 
-        let inputPipe = Pipe()
-        let outputPipe = Pipe()
         let errorPipe = Pipe()
-        process.standardInput = inputPipe
-        process.standardOutput = outputPipe
+        process.standardOutput = outputHandle
         process.standardError = errorPipe
 
         try process.run()
-        inputPipe.fileHandleForWriting.write(input)
-        inputPipe.fileHandleForWriting.closeFile()
         process.waitUntilExit()
 
-        let output = outputPipe.fileHandleForReading.readDataToEndOfFile()
         if process.terminationStatus != 0 {
             let error = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "gzip failed"
             throw K3Error.userFacing(error)
         }
-        return output
+
+        try outputHandle.close()
+        return try Data(contentsOf: outputURL)
     }
 }

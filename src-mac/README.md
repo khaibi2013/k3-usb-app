@@ -20,6 +20,19 @@ This is the macOS companion app for the K3 USB vault. It is written with SwiftUI
 3. Select the `K3UsbSafeMac` scheme.
 4. Run.
 
+## Build From Terminal
+
+```bash
+cd src-mac
+swift build -c release
+```
+
+The release executable is written to:
+
+```text
+src-mac/.build/release/K3UsbSafeMac
+```
+
 ## Features
 
 - Password login using the existing `.vault_config.json` PBKDF2 format.

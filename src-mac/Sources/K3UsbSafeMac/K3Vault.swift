@@ -28,12 +28,26 @@ enum K3Vault {
         if !FileManager.default.fileExists(atPath: vault.path) {
             try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
         }
+        let didAccessFile = file.startAccessingSecurityScopedResource()
+        defer {
+            if didAccessFile {
+                file.stopAccessingSecurityScopedResource()
+            }
+        }
+
         let destination = availableURL(for: vault.appendingPathComponent(file.lastPathComponent + ".k3enc"))
         try crypto.encrypt(file: file, to: destination)
         try MacSystemTools.hide(vault)
     }
 
     static func decrypt(file: URL, to folder: URL, crypto: K3Crypto) throws {
+        let didAccessFolder = folder.startAccessingSecurityScopedResource()
+        defer {
+            if didAccessFolder {
+                folder.stopAccessingSecurityScopedResource()
+            }
+        }
+
         if !FileManager.default.fileExists(atPath: folder.path) {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
