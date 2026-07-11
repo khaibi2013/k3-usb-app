@@ -82,11 +82,26 @@ Trong danh sach ket:
 - Giai ma `.k3folder`: bung lai folder goc ra may.
 - Neu co nut scan/toan ven/security center thi dem ca `.k3enc` va `.k3folder`.
 
-Khong bat buoc mo browse ben trong `.k3folder` ngay trong phase nay. Neu lam duoc thi tot, nhung uu tien:
+## Virtual Folder Viewer cho `.k3folder`
 
-1. Tao `.k3folder`.
-2. Giai ma `.k3folder`.
-3. Tuong thich Windows <-> Mac.
+Can lam de user co the vao ket va xem folder package nhu folder binh thuong:
+
+1. Double-click `TenFolder.k3folder`.
+2. App tao temp local rieng, vi du:
+   ```text
+   /tmp/K3FolderView_<uuid>/
+   ```
+3. Giai ma `.k3folder` vao temp de thu `TenFolder.zip`.
+4. Giai nen zip vao temp.
+5. Hien thi cay thu muc/file ben trong trong UI cua ket.
+6. Khi user bam `..` o root package thi quay lai ket that.
+7. Khi user copy/giai ma file/folder tu viewer ra may:
+   - Copy tu temp ra thu muc dich.
+   - Khong sua truc tiep noi dung trong `.k3folder`.
+8. Khi app lock, logout, eject, close, crash-safe best effort:
+   - Xoa temp `K3FolderView_<uuid>`.
+
+Phase nay chua can sua file ben trong `.k3folder`. Neu user muon cap nhat package thi co the giai ma ra ngoai, sua, roi dua folder vao ket lai de tao package moi.
 
 ## Test bat buoc
 
@@ -96,13 +111,16 @@ Sau khi sua Mac, test cac ca sau:
 2. Windows tao file le `.k3enc`, Mac giai ma duoc.
 3. Mac tao folder `.k3folder`, Windows giai ma bung dung cay folder.
 4. Windows tao folder `.k3folder`, Mac giai ma bung dung cay folder.
-5. Folder co:
+5. Windows/Mac double-click `.k3folder` trong ket va xem duoc danh sach file/folder ben trong.
+6. Copy 1 file va 1 subfolder tu viewer `.k3folder` ra may, noi dung phai dung.
+7. Lock/close app sau khi xem `.k3folder`, temp viewer phai duoc xoa.
+8. Folder co:
    - file rong
    - file ten tieng Viet
    - subfolder nhieu cap
    - file lon tren 1GB neu co the
    - nhieu file nho
-6. Rut/copy loi gia lap:
+9. Rut/copy loi gia lap:
    - Khong de lai package hong.
    - Khong xoa source goc neu import chua xong.
 
@@ -114,6 +132,9 @@ Tham khao cac thay doi tren Windows:
   - `CreateEncryptedFolderPackage`
   - `DecryptFolderPackage`
   - `.k3folder` display/decrypt handling
+  - `OpenK3FolderPackageView`
+  - `CleanupK3FolderView`
+  - virtual viewer navigation for `.k3folder`
 - `src-csharp/CryptoEngine.cs`
   - streaming encrypt/decrypt/verify
 - `src-csharp/SecurityCenterForm.cs`

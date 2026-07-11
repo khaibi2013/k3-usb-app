@@ -62,6 +62,8 @@ namespace AnToanUSB
         private string vaultPath;
         private string currentMiddlePath = "";
         private string currentRightPath = "";
+        private string currentK3FolderPackagePath = "";
+        private string currentK3FolderViewRoot = "";
         private bool showHiddenFiles = false;
         private CancellationTokenSource searchCts;
         private int searchMatchCount = 0;
@@ -101,6 +103,7 @@ namespace AnToanUSB
             SetupAutoEncrypt();
             StartAppDriveMonitor();
             Shown += (s, e) => BeginInvoke(new Action(() => { LoadInitialDataFast(); StartAutoScanOnLoginIfNeeded(); }));
+            FormClosed += (s, e) => CleanupK3FolderView();
         }
 
         private void StartAutoScanOnLoginIfNeeded()
@@ -339,6 +342,89 @@ namespace AnToanUSB
             return path != null && path.EndsWith(".k3folder", StringComparison.OrdinalIgnoreCase);
         }
 
+        private bool IsViewingK3FolderPackage()
+        {
+            return !string.IsNullOrEmpty(currentK3FolderPackagePath) &&
+                   !string.IsNullOrEmpty(currentK3FolderViewRoot) &&
+                   Directory.Exists(currentK3FolderViewRoot);
+        }
+
+        private bool IsInK3FolderView(string path)
+        {
+            if (!IsViewingK3FolderPackage() || string.IsNullOrEmpty(path)) return false;
+            try
+            {
+                string fullPath = Path.GetFullPath(path);
+                string root = Path.GetFullPath(currentK3FolderViewRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase) ||
+                       string.Equals(fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), root.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void OpenK3FolderPackageView(string packagePath)
+        {
+            if (!File.Exists(packagePath) || !IsK3FolderPackage(packagePath)) return;
+            CleanupK3FolderView();
+
+            string tempRoot = Path.Combine(Path.GetTempPath(), "K3FolderView_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+            try
+            {
+                DecryptFolderPackage(packagePath, tempRoot);
+                string[] dirs = Directory.GetDirectories(tempRoot);
+                if (dirs.Length != 1) throw new IOException("Package folder khong hop le.");
+
+                currentK3FolderPackagePath = packagePath;
+                currentK3FolderViewRoot = dirs[0];
+                LoadRightPane(currentK3FolderViewRoot);
+            }
+            catch
+            {
+                try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
+                currentK3FolderPackagePath = "";
+                currentK3FolderViewRoot = "";
+                throw;
+            }
+        }
+
+        private void LeaveK3FolderPackageView()
+        {
+            string returnPath = !string.IsNullOrEmpty(currentK3FolderPackagePath)
+                ? (Path.GetDirectoryName(currentK3FolderPackagePath) ?? vaultPath)
+                : vaultPath;
+            CleanupK3FolderView();
+            LoadRightPane(returnPath);
+        }
+
+        private void CleanupK3FolderView()
+        {
+            string root = currentK3FolderViewRoot;
+            currentK3FolderPackagePath = "";
+            currentK3FolderViewRoot = "";
+            try
+            {
+                if (!string.IsNullOrEmpty(root))
+                {
+                    DirectoryInfo dir = new DirectoryInfo(root);
+                    DirectoryInfo parent = dir.Parent;
+                    if (parent != null && parent.Exists && parent.Name.StartsWith("K3FolderView_", StringComparison.OrdinalIgnoreCase))
+                        parent.Delete(true);
+                }
+            }
+            catch { }
+        }
+
+        private string GetCurrentVaultWritePath()
+        {
+            if (IsViewingK3FolderPackage())
+                return Path.GetDirectoryName(currentK3FolderPackagePath) ?? vaultPath;
+            return string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath;
+        }
+
         private bool IsInsidePath(string filePath, string directoryPath)
         {
             string dir = directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
@@ -507,7 +593,14 @@ namespace AnToanUSB
                 listRight.Items.Clear();
                 currentRightPath = path;
 
-                if (path != vaultPath)
+                if (IsViewingK3FolderPackage() && string.Equals(path, currentK3FolderViewRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    var upItem = new ListViewItem(new[] { "..", "Back to vault", "", "" });
+                    upItem.Tag = Path.GetDirectoryName(currentK3FolderPackagePath) ?? vaultPath;
+                    upItem.ImageKey = "folder";
+                    listRight.Items.Add(upItem);
+                }
+                else if (path != vaultPath)
                 {
                     var upItem = new ListViewItem(new[] { "..", "Go Back", "", "" });
                     upItem.Tag = Path.GetDirectoryName(path) ?? vaultPath;
@@ -722,7 +815,7 @@ namespace AnToanUSB
                     if (!string.IsNullOrEmpty(currentMiddlePath)) CreateNewFolder(currentMiddlePath, () => LoadMiddlePane(currentMiddlePath));
                     else MessageBox.Show("Vui lòng chọn một thư mục trên Máy tính ở cột bên trái trước!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     } else if (dialog.SelectedId == "vault") {
-                    string targetVaultDir = string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath;
+                    string targetVaultDir = GetCurrentVaultWritePath();
                     CreateNewFolder(targetVaultDir, () => LoadRightPane(currentRightPath));
                     }
                 }
@@ -898,7 +991,7 @@ namespace AnToanUSB
             var mnuPasteEncrypt = new ToolStripMenuItem("Dán và Mã hóa") { ShortcutKeys = Keys.Control | Keys.M };
             var mnuEncryptFile = new ToolStripMenuItem("Mã hóa tệp");
             var mnuEncryptCustom = new ToolStripMenuItem("Mã hóa với khóa tùy chọn");
-            mnuPasteEncrypt.Click += (s, e) => PasteClipboardEncryptedTo(string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath);
+            mnuPasteEncrypt.Click += (s, e) => PasteClipboardEncryptedTo(GetCurrentVaultWritePath());
             mnuEncryptCustom.Click += (s, e) => EncryptSelectedWithCustomPassword(listMiddle, () => LoadMiddlePane(currentMiddlePath));
             try { mnuPasteEncrypt.Image = IconExtractor.GetSystemIcon("shell32.dll", 262, true); } catch { }
             try { mnuEncryptFile.Image = IconExtractor.GetSystemIcon("shell32.dll", 47, true); } catch { }
@@ -1039,7 +1132,7 @@ namespace AnToanUSB
                 {
                     try
                     {
-                        string targetVaultDir = string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath;
+                        string targetVaultDir = GetCurrentVaultWritePath();
                         string[] paths = GetSelectedPaths(listMiddle);
                         VaultImportResult result = await EncryptPathsToVaultAsync(paths, targetVaultDir, false, "Dang dua file/folder vao Ket sat...");
                         LoadRightPane(currentRightPath);
@@ -1098,7 +1191,11 @@ namespace AnToanUSB
                 if (listRight.SelectedItems.Count > 0)
                 {
                     string path = listRight.SelectedItems[0].Tag.ToString();
-                    if (!string.IsNullOrEmpty(path) && Directory.Exists(path)) 
+                    if (IsViewingK3FolderPackage() && !string.IsNullOrEmpty(path) && !IsInK3FolderView(path))
+                        LeaveK3FolderPackageView();
+                    else if (!string.IsNullOrEmpty(path) && File.Exists(path) && IsK3FolderPackage(path))
+                        OpenK3FolderPackageView(path);
+                    else if (!string.IsNullOrEmpty(path) && Directory.Exists(path)) 
                         LoadRightPane(path);
                 }
             };
@@ -1118,7 +1215,7 @@ namespace AnToanUSB
             var mnuRightPaste = new ToolStripMenuItem("Paste (mã hóa)") { ShortcutKeys = Keys.Control | Keys.V };
             mnuRightCopy.Click += (s, e) => CaptureClipboardSelection(listRight, false);
             mnuRightCut.Click += (s, e) => CaptureClipboardSelection(listRight, true);
-            mnuRightPaste.Click += (s, e) => PasteClipboardEncryptedTo(string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath);
+            mnuRightPaste.Click += (s, e) => PasteClipboardEncryptedTo(GetCurrentVaultWritePath());
             ctxRight.Items.Add(mnuRightCopy);
             ctxRight.Items.Add(mnuRightCut);
             ctxRight.Items.Add(mnuRightPaste);
@@ -1224,7 +1321,7 @@ namespace AnToanUSB
             ctxRight.Items.Add(new ToolStripSeparator());
             var mnuRightNewFolder = new ToolStripMenuItem("New Folder");
             mnuRightNewFolder.Click += (s, e) => {
-                string targetVaultDir = string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath;
+                string targetVaultDir = GetCurrentVaultWritePath();
                 CreateNewFolder(targetVaultDir, () => LoadRightPane(currentRightPath));
             };
             var mnuRightNewNote = new ToolStripMenuItem("Tạo ghi chú");
@@ -1431,7 +1528,7 @@ namespace AnToanUSB
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             string[] paths = (string[])e.Data.GetData(DataFormats.FileDrop);
-            string targetVaultDir = string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath;
+            string targetVaultDir = GetCurrentVaultWritePath();
             VaultImportResult result = await EncryptPathsToVaultAsync(paths, targetVaultDir, false, "Dang keo tha vao Ket sat...");
             LoadRightPane(currentRightPath);
             ShowVaultImportResult(result, "Keo tha ma hoa");
@@ -1461,13 +1558,13 @@ namespace AnToanUSB
             }
             else if (e.Control && e.KeyCode == Keys.V)
             {
-                if (isVaultPane) PasteClipboardEncryptedTo(string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath);
+                if (isVaultPane) PasteClipboardEncryptedTo(GetCurrentVaultWritePath());
                 else PasteClipboardTo(currentMiddlePath, () => LoadMiddlePane(currentMiddlePath));
                 e.Handled = true;
             }
             else if (e.Control && e.KeyCode == Keys.M)
             {
-                PasteClipboardEncryptedTo(string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath);
+                PasteClipboardEncryptedTo(GetCurrentVaultWritePath());
                 e.Handled = true;
             }
             else if (e.KeyCode == Keys.Delete)
@@ -2526,6 +2623,7 @@ namespace AnToanUSB
             try
             {
                 CryptoEngine.Logout();
+                CleanupK3FolderView();
                 if (watcher != null) watcher.EnableRaisingEvents = false;
                 if (ConfigManager.WipeHistory) CleanupRecentHistory();
                 if (IsEjectableAppDrive(root)) StartUsbEjectHelper(root);
@@ -2623,6 +2721,7 @@ namespace AnToanUSB
             isAutoExitingForRemovedDrive = true;
             try { if (appDriveMonitorTimer != null) appDriveMonitorTimer.Stop(); } catch { }
             try { CryptoEngine.Logout(); } catch { }
+            try { CleanupK3FolderView(); } catch { }
             try { if (watcher != null) watcher.EnableRaisingEvents = false; } catch { }
             Application.Exit();
         }
