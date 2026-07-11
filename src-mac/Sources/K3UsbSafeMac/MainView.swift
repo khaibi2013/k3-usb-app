@@ -359,7 +359,7 @@ struct MainView: View {
                 EmptyStateView(
                     icon: "tray",
                     title: "Ket dang trong",
-                    message: "Chon file hoac thu muc ben trai, sau do bam mui ten de dua vao ket.",
+                    message: "Chon file de tao .k3enc hoac chon thu muc de tao mot goi .k3folder.",
                     primaryTitle: "Viet ghi chu",
                     primaryIcon: "note.text.badge.plus"
                 ) {
@@ -838,10 +838,14 @@ private struct VaultRow: View {
 
     var body: some View {
         HStack {
-            Image(systemName: "doc.badge.lock")
-                .foregroundStyle(.teal)
+            Image(systemName: item.isFolderPackage ? "folder.badge.gearshape" : "doc.badge.lock")
+                .foregroundStyle(item.isFolderPackage ? .blue : .teal)
+                .frame(width: 22)
             VStack(alignment: .leading) {
                 Text(item.displayName)
+                Text(item.isFolderPackage ? "Goi thu muc .k3folder" : "File ma hoa .k3enc")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(item.url.path)
                     .font(.caption)
                     .foregroundStyle(.secondary)

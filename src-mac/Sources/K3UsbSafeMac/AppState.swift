@@ -310,7 +310,7 @@ final class AppState: ObservableObject {
     func decryptDroppedVaultURLs(_ urls: [URL]) {
         guard let crypto else { return }
         var decryptedCount = 0
-        for url in urls where url.pathExtension.lowercased() == "k3enc" {
+        for url in urls where isEncryptedVaultFile(url) {
             do {
                 try K3Vault.decrypt(file: url, to: browserURL, crypto: crypto)
                 decryptedCount += 1
@@ -364,7 +364,7 @@ final class AppState: ObservableObject {
     func encryptBaoMatFiles() {
         do {
             try FileManager.default.createDirectory(at: baoMatURL, withIntermediateDirectories: true)
-            let files = scanFiles(at: baoMatURL).filter { $0.pathExtension.lowercased() != "k3enc" }
+            let files = scanFiles(at: baoMatURL).filter { !isEncryptedVaultFile($0) }
             guard !files.isEmpty else {
                 statusMessage = "BaoMat khong co file de ma hoa."
                 return
@@ -380,7 +380,7 @@ final class AppState: ObservableObject {
         guard let crypto else { return }
         do {
             isBusy = true
-            progressMessage = "Dang ma hoa thu muc..."
+            progressMessage = "Dang kiem tra thu muc..."
             defer {
                 isBusy = false
                 progressMessage = ""
@@ -392,37 +392,18 @@ final class AppState: ObservableObject {
                 }
             }
 
-            let files = scanFiles(at: folder).filter { $0.pathExtension.lowercased() != "k3enc" }
-            guard !files.isEmpty else {
-                statusMessage = "Thu muc da chon khong co file de ma hoa."
-                return
-            }
-
-            var encryptedCount = 0
-            for (index, file) in files.enumerated() {
-                let storedName = try K3Vault.storedName(for: file, inside: folder, includeRootFolder: true)
-                progressMessage = "Ma hoa \(index + 1)/\(files.count): \(storedName)"
-                if !K3TrustedFileManager.isTrusted(file, root: usbRoot) {
-                    let scan = K3MacScanner.scan(file, root: usbRoot)
-                    if scan.isThreat {
-                        statusMessage = "Da chan: \(storedName) - \(scan.name)"
-                        scanFindings.append(ScanFinding(url: file, status: "Threat", signature: scan.name))
-                        K3HistoryManager.append("WARN", statusMessage, root: usbRoot)
-                        continue
-                    }
-                }
-                try K3Vault.encrypt(file: file, into: vaultURL, crypto: crypto, storedName: storedName)
-                encryptedCount += 1
-                K3HistoryManager.append("INFO", "Da ma hoa \(storedName)", root: usbRoot)
-            }
-
-            if removeOriginal, encryptedCount == files.count {
+            let checkedFiles = try preflightFolderForPackage(folder)
+            progressMessage = "Dang dong goi .k3folder..."
+            try K3Vault.encryptFolderPackage(folder: folder, into: vaultURL, crypto: crypto)
+            if removeOriginal {
                 try? K3Maintenance.secureShredDirectory(folder)
             }
             refreshVault()
             loadLocalBrowser(at: browserURL)
             refreshHistory()
-            statusMessage = "Da ma hoa \(encryptedCount)/\(files.count) file trong thu muc."
+            let detail = checkedFiles == 0 ? "thu muc rong" : "\(checkedFiles) file"
+            statusMessage = "Da dua \(folder.lastPathComponent).k3folder vao ket (\(detail))."
+            K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
         } catch {
             statusMessage = "Ma hoa thu muc that bai: \(error.localizedDescription)"
         }
@@ -901,7 +882,7 @@ final class AppState: ObservableObject {
             return
         }
         let candidates = scanFiles(at: watchURL)
-            .filter { !$0.pathExtension.lowercased().elementsEqual("k3enc") }
+            .filter { !isEncryptedVaultFile($0) }
             .filter { !$0.path.contains("/.vault/") && !$0.path.contains("/.vault_decoy/") && !$0.path.contains("/.k3_quarantine/") }
         let newFiles = candidates.filter { autoEncryptSeen.insert($0.path).inserted }
         guard !newFiles.isEmpty else { return }
@@ -947,6 +928,48 @@ final class AppState: ObservableObject {
                   (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { return nil }
             return file
         }
+    }
+
+    private func preflightFolderForPackage(_ folder: URL) throws -> Int {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            throw K3Error.userFacing("Hay chon dung thu muc.")
+        }
+        guard let enumerator = FileManager.default.enumerator(
+            at: folder,
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
+            options: []
+        ) else {
+            throw K3Error.userFacing("Khong the doc danh sach thu muc.")
+        }
+
+        var checkedFiles = 0
+        for case let url as URL in enumerator {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey])
+            if values.isDirectory == true { continue }
+            guard values.isRegularFile == true else { continue }
+            checkedFiles += 1
+            do {
+                let handle = try FileHandle(forReadingFrom: url)
+                try? handle.close()
+            } catch {
+                throw K3Error.userFacing("Khong doc duoc file: \(url.path)")
+            }
+            if !K3TrustedFileManager.isTrusted(url, root: usbRoot) {
+                let scan = K3MacScanner.scan(url, root: usbRoot)
+                if scan.isThreat {
+                    let message = "Da chan folder package: \(url.lastPathComponent) - \(scan.name)"
+                    scanFindings.append(ScanFinding(url: url, status: "Threat", signature: scan.name))
+                    K3HistoryManager.append("WARN", message, root: usbRoot)
+                    throw K3Error.userFacing(message)
+                }
+            }
+        }
+        return checkedFiles
+    }
+
+    private func isEncryptedVaultFile(_ url: URL) -> Bool {
+        ["k3enc", "k3folder"].contains(url.pathExtension.lowercased())
     }
 
     private func sanitizedFileName(_ value: String) -> String {

@@ -4,6 +4,7 @@ struct VaultItem: Identifiable, Hashable {
     let id = UUID()
     let url: URL
     let displayName: String
+    let isFolderPackage: Bool
     let size: Int64
     let modified: Date
 }
@@ -15,11 +16,17 @@ enum K3Vault {
         }
         let urls = try FileManager.default.contentsOfDirectory(at: vault, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey], options: [.skipsHiddenFiles])
         return urls
-            .filter { $0.pathExtension.lowercased() == "k3enc" }
+            .filter { ["k3enc", "k3folder"].contains($0.pathExtension.lowercased()) }
             .map { url in
                 let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
                 let name = url.deletingPathExtension().lastPathComponent
-                return VaultItem(url: url, displayName: name, size: Int64(values?.fileSize ?? 0), modified: values?.contentModificationDate ?? .distantPast)
+                return VaultItem(
+                    url: url,
+                    displayName: name,
+                    isFolderPackage: url.pathExtension.lowercased() == "k3folder",
+                    size: Int64(values?.fileSize ?? 0),
+                    modified: values?.contentModificationDate ?? .distantPast
+                )
             }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
@@ -41,6 +48,44 @@ enum K3Vault {
         try MacSystemTools.hide(vault)
     }
 
+    static func encryptFolderPackage(folder: URL, into vault: URL, crypto: K3Crypto) throws {
+        if !FileManager.default.fileExists(atPath: vault.path) {
+            try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
+        }
+        let didAccessFolder = folder.startAccessingSecurityScopedResource()
+        defer {
+            if didAccessFolder {
+                folder.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let folderName = try safeFileName(folder.lastPathComponent)
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("K3FolderPackage-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let tempZip = tempRoot.appendingPathComponent("\(folderName).zip")
+        let tempEncrypted = tempRoot.appendingPathComponent("\(folderName).k3folder")
+        try createZip(from: folder, to: tempZip)
+        try crypto.encrypt(file: tempZip, to: tempEncrypted, storedName: "\(folderName).zip")
+        try crypto.verify(file: tempEncrypted)
+
+        let destination = availableURL(for: vault.appendingPathComponent("\(folderName).k3folder"))
+        do {
+            try FileManager.default.copyItem(at: tempEncrypted, to: destination)
+            guard fileSize(tempEncrypted) == fileSize(destination),
+                  K3TrustedFileManager.sha256(tempEncrypted) == K3TrustedFileManager.sha256(destination) else {
+                throw K3Error.userFacing("Copy package sang USB khong toan ven.")
+            }
+            try crypto.verify(file: destination)
+            try MacSystemTools.hide(vault)
+        } catch {
+            try? FileManager.default.removeItem(at: destination)
+            throw error
+        }
+    }
+
     static func decrypt(file: URL, to folder: URL, crypto: K3Crypto) throws {
         let didAccessFolder = folder.startAccessingSecurityScopedResource()
         defer {
@@ -52,7 +97,11 @@ enum K3Vault {
         if !FileManager.default.fileExists(atPath: folder.path) {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
-        _ = try crypto.decrypt(file: file, to: folder)
+        if file.pathExtension.lowercased() == "k3folder" {
+            try decryptFolderPackage(file: file, to: folder, crypto: crypto)
+        } else {
+            _ = try crypto.decrypt(file: file, to: folder)
+        }
     }
 
     static func storedName(for file: URL, inside folder: URL, includeRootFolder: Bool = true) throws -> String {
@@ -80,6 +129,18 @@ enum K3Vault {
         }
     }
 
+    private static func availableDirectoryURL(for url: URL) -> URL {
+        if !FileManager.default.fileExists(atPath: url.path) { return url }
+        let directory = url.deletingLastPathComponent()
+        let base = url.lastPathComponent
+        var index = 1
+        while true {
+            let candidate = directory.appendingPathComponent("\(base) (\(index))", isDirectory: true)
+            if !FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+            index += 1
+        }
+    }
+
     private static func flatArchiveName(for storedName: String) -> String {
         storedName
             .replacingOccurrences(of: "\\", with: "/")
@@ -99,5 +160,41 @@ enum K3Vault {
             }
         }
         return parts.joined(separator: "/")
+    }
+
+    private static func safeFileName(_ value: String) throws -> String {
+        let safe = try safeRelativePath(value)
+        guard !safe.contains("/") else { throw K3Error.userFacing("Ten thu muc khong hop le.") }
+        return safe
+    }
+
+    private static func createZip(from folder: URL, to zipURL: URL) throws {
+        _ = try MacSystemTools.run("/usr/bin/ditto", ["-c", "-k", "--norsrc", folder.path, zipURL.path])
+    }
+
+    private static func decryptFolderPackage(file: URL, to folder: URL, crypto: K3Crypto) throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("K3FolderDecrypt-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipURL = try crypto.decrypt(file: file, to: tempRoot)
+        guard zipURL.pathExtension.lowercased() == "zip" else {
+            throw K3Error.userFacing(".k3folder khong chua metadata zip hop le.")
+        }
+
+        let folderName = try safeFileName(zipURL.deletingPathExtension().lastPathComponent)
+        let outputRoot = availableDirectoryURL(for: folder.appendingPathComponent(folderName, isDirectory: true))
+        try FileManager.default.createDirectory(at: outputRoot, withIntermediateDirectories: true)
+        do {
+            _ = try MacSystemTools.run("/usr/bin/ditto", ["-x", "-k", "--norsrc", zipURL.path, outputRoot.path])
+        } catch {
+            try? FileManager.default.removeItem(at: outputRoot)
+            throw error
+        }
+    }
+
+    private static func fileSize(_ url: URL) -> Int64 {
+        Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1)
     }
 }
