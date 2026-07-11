@@ -21,7 +21,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 - [x] Windows `.k3folder` package for commercial folder import stability.
 - [x] Windows `.k3folder` virtual viewer.
 - [x] macOS `.k3folder` compatibility with Windows.
-- [ ] macOS `.k3folder` virtual viewer.
+- [x] macOS `.k3folder` virtual viewer.
 - [x] Integrity manifest for app/tools/rules.
 - [x] Recovery key architecture design.
 - [ ] Recovery key implementation for new vault format or compatible bridge.

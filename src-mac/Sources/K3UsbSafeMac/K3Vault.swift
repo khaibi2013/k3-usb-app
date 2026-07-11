@@ -9,6 +9,13 @@ struct VaultItem: Identifiable, Hashable {
     let modified: Date
 }
 
+struct K3FolderViewSession {
+    let packageURL: URL
+    let tempRoot: URL
+    let root: URL
+    let displayName: String
+}
+
 enum K3Vault {
     static func listEncryptedFiles(in vault: URL) throws -> [VaultItem] {
         if !FileManager.default.fileExists(atPath: vault.path) {
@@ -104,6 +111,34 @@ enum K3Vault {
         }
     }
 
+    static func openFolderPackageView(file: URL, crypto: K3Crypto) throws -> K3FolderViewSession {
+        guard file.pathExtension.lowercased() == "k3folder" else {
+            throw K3Error.userFacing("Muc da chon khong phai .k3folder.")
+        }
+
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("K3FolderView_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+
+        do {
+            let zipURL = try crypto.decrypt(file: file, to: tempRoot)
+            guard zipURL.pathExtension.lowercased() == "zip" else {
+                throw K3Error.userFacing(".k3folder khong chua metadata zip hop le.")
+            }
+            try validateZipEntries(zipURL)
+
+            let folderName = try safeFileName(zipURL.deletingPathExtension().lastPathComponent)
+            let outputRoot = tempRoot.appendingPathComponent(folderName, isDirectory: true)
+            try FileManager.default.createDirectory(at: outputRoot, withIntermediateDirectories: true)
+            _ = try MacSystemTools.run("/usr/bin/ditto", ["-x", "-k", "--norsrc", zipURL.path, outputRoot.path])
+            try validateExtractedTree(outputRoot, inside: tempRoot)
+            return K3FolderViewSession(packageURL: file, tempRoot: tempRoot, root: outputRoot, displayName: folderName)
+        } catch {
+            try? FileManager.default.removeItem(at: tempRoot)
+            throw error
+        }
+    }
+
     static func storedName(for file: URL, inside folder: URL, includeRootFolder: Bool = true) throws -> String {
         let folderPath = folder.standardizedFileURL.path
         let filePath = file.standardizedFileURL.path
@@ -185,9 +220,11 @@ enum K3Vault {
 
         let folderName = try safeFileName(zipURL.deletingPathExtension().lastPathComponent)
         let outputRoot = availableDirectoryURL(for: folder.appendingPathComponent(folderName, isDirectory: true))
+        try validateZipEntries(zipURL)
         try FileManager.default.createDirectory(at: outputRoot, withIntermediateDirectories: true)
         do {
             _ = try MacSystemTools.run("/usr/bin/ditto", ["-x", "-k", "--norsrc", zipURL.path, outputRoot.path])
+            try validateExtractedTree(outputRoot, inside: folder)
         } catch {
             try? FileManager.default.removeItem(at: outputRoot)
             throw error
@@ -196,5 +233,63 @@ enum K3Vault {
 
     private static func fileSize(_ url: URL) -> Int64 {
         Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1)
+    }
+
+    private static func validateZipEntries(_ zipURL: URL) throws {
+        let output = try zipEntryList(zipURL)
+        for rawLine in output.split(whereSeparator: \.isNewline) {
+            let entry = String(rawLine)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "\\", with: "/")
+            if entry.isEmpty { continue }
+            guard !entry.hasPrefix("/") && !entry.contains("\0") else {
+                throw K3Error.userFacing("Zip trong .k3folder co duong dan khong an toan.")
+            }
+            let parts = entry.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+            guard !parts.isEmpty else { continue }
+            for part in parts {
+                if part == "." || part == ".." {
+                    throw K3Error.userFacing("Zip trong .k3folder co path traversal.")
+                }
+            }
+        }
+    }
+
+    private static func zipEntryList(_ zipURL: URL) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/zipinfo")
+        process.arguments = ["-1", zipURL.path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: data, encoding: .utf8) ?? ""
+        if process.terminationStatus == 0 {
+            return output
+        }
+        let lower = output.lowercased()
+        if lower.contains("empty zipfile") || lower.contains("zipfile is empty") {
+            return ""
+        }
+        throw K3Error.userFacing(output.isEmpty ? "Khong doc duoc danh sach zip." : output)
+    }
+
+    private static func validateExtractedTree(_ root: URL, inside container: URL) throws {
+        let containerPath = container.standardizedFileURL.path
+        let prefix = containerPath.hasSuffix("/") ? containerPath : containerPath + "/"
+        guard root.standardizedFileURL.path.hasPrefix(prefix) else {
+            throw K3Error.userFacing("Thu muc bung package khong an toan.")
+        }
+        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isSymbolicLinkKey], options: []) else {
+            return
+        }
+        for case let url as URL in enumerator {
+            let path = url.standardizedFileURL.path
+            guard path.hasPrefix(prefix) else {
+                throw K3Error.userFacing("Package giai nen ra ngoai temp.")
+            }
+        }
     }
 }

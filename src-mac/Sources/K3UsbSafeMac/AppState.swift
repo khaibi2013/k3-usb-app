@@ -22,16 +22,37 @@ final class AppState: ObservableObject {
     @Published var lastScanDate: Date?
     @Published var isBusy = false
     @Published var progressMessage = ""
+    @Published var isViewingFolderPackage = false
+    @Published var folderViewerItems: [LocalFileItem] = []
+    @Published var folderViewerTitle = ""
+    @Published var folderViewerPath = ""
 
     private var crypto: K3Crypto?
     private var autoEncryptTimer: Timer?
     private var autoEncryptSeen: Set<String> = []
+    private var folderViewerSession: K3FolderViewSession?
+    private var folderViewerURL: URL?
+    private var terminationObserver: NSObjectProtocol?
 
     init() {
         let root = Self.detectUsbRoot()
         self.usbRoot = root
         self.browserURL = root
         self.config = K3Config.defaultConfig()
+        self.terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.cleanupFolderPackageViewer()
+        }
+    }
+
+    deinit {
+        cleanupFolderPackageViewer()
+        if let terminationObserver {
+            NotificationCenter.default.removeObserver(terminationObserver)
+        }
     }
 
     private static func detectUsbRoot() -> URL {
@@ -171,6 +192,7 @@ final class AppState: ObservableObject {
     func logout() {
         K3HistoryManager.append("INFO", "Da dang xuat", root: usbRoot)
         stopAutoEncryptWatcher()
+        cleanupFolderPackageViewer()
         crypto = nil
         isAuthenticated = false
         isDecoyMode = false
@@ -189,6 +211,9 @@ final class AppState: ObservableObject {
     func refreshVault() {
         do {
             vaultFiles = try K3Vault.listEncryptedFiles(in: vaultURL)
+            if !isViewingFolderPackage {
+                folderViewerItems = []
+            }
             reloadSecurityRows()
         } catch {
             vaultFiles = []
@@ -334,6 +359,83 @@ final class AppState: ObservableObject {
         }
         decrypt(item, to: browserURL)
         loadLocalBrowser(at: browserURL)
+    }
+
+    func openFolderPackageViewer(_ item: VaultItem) {
+        guard let crypto else { return }
+        guard item.isFolderPackage else {
+            statusMessage = "Chi .k3folder moi mo duoc trong viewer."
+            return
+        }
+        do {
+            cleanupFolderPackageViewer()
+            isBusy = true
+            progressMessage = "Dang mo .k3folder..."
+            defer {
+                isBusy = false
+                progressMessage = ""
+            }
+            let session = try K3Vault.openFolderPackageView(file: item.url, crypto: crypto)
+            folderViewerSession = session
+            isViewingFolderPackage = true
+            folderViewerTitle = session.displayName
+            loadFolderViewer(at: session.root)
+            statusMessage = "Dang xem \(item.displayName).k3folder trong temp local."
+            K3HistoryManager.append("INFO", "Da mo viewer .k3folder: \(item.displayName)", root: usbRoot)
+            refreshHistory()
+        } catch {
+            cleanupFolderPackageViewer()
+            statusMessage = "Mo .k3folder that bai: \(error.localizedDescription)"
+        }
+    }
+
+    func leaveFolderPackageViewer() {
+        cleanupFolderPackageViewer()
+        refreshVault()
+        statusMessage = "Da quay lai ket."
+    }
+
+    func goToFolderViewerParent() {
+        guard let session = folderViewerSession, let current = folderViewerURL else { return }
+        if current.standardizedFileURL.path == session.root.standardizedFileURL.path {
+            leaveFolderPackageViewer()
+        } else {
+            loadFolderViewer(at: current.deletingLastPathComponent())
+        }
+    }
+
+    func openFolderViewerItem(_ item: LocalFileItem) {
+        guard isViewingFolderPackage else { return }
+        if item.isDirectory {
+            loadFolderViewer(at: item.url)
+        } else {
+            statusMessage = "Chon 'Dua ra' de copy file tu .k3folder ra may."
+        }
+    }
+
+    func copyFolderViewerSelectionToBrowser(_ item: LocalFileItem?) {
+        guard let item else {
+            statusMessage = "Hay chon file hoac thu muc trong .k3folder."
+            return
+        }
+        guard isViewingFolderPackage, let session = folderViewerSession else { return }
+        do {
+            guard isInside(item.url, root: session.root) else {
+                throw K3Error.userFacing("Muc viewer nam ngoai temp package.")
+            }
+            try FileManager.default.createDirectory(at: browserURL, withIntermediateDirectories: true)
+            let destination = availableCopyURL(
+                for: browserURL.appendingPathComponent(item.name, isDirectory: item.isDirectory),
+                isDirectory: item.isDirectory
+            )
+            try FileManager.default.copyItem(at: item.url, to: destination)
+            loadLocalBrowser(at: browserURL)
+            statusMessage = "Da copy \(item.name) tu .k3folder ra \(browserURL.lastPathComponent)."
+            K3HistoryManager.append("INFO", statusMessage, root: usbRoot)
+            refreshHistory()
+        } catch {
+            statusMessage = "Copy tu .k3folder that bai: \(error.localizedDescription)"
+        }
     }
 
     func createAndEncryptTextNote(title: String, content: String) {
@@ -930,6 +1032,58 @@ final class AppState: ObservableObject {
         }
     }
 
+    func cleanupFolderPackageViewer() {
+        let tempRoot = folderViewerSession?.tempRoot
+        folderViewerSession = nil
+        folderViewerURL = nil
+        isViewingFolderPackage = false
+        folderViewerItems = []
+        folderViewerTitle = ""
+        folderViewerPath = ""
+        if let tempRoot, !tempRoot.path.hasPrefix(usbRoot.path) {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+    }
+
+    private func loadFolderViewer(at folder: URL) {
+        guard let session = folderViewerSession else { return }
+        guard isInside(folder, root: session.root) else {
+            statusMessage = "Chan truy cap ngoai viewer temp."
+            return
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            statusMessage = "Khong tim thay thu muc trong .k3folder."
+            return
+        }
+
+        folderViewerURL = folder
+        folderViewerPath = relativePath(from: folder, root: session.root).map { "\(session.displayName)/\($0)" } ?? session.displayName
+        do {
+            let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey]
+            let urls = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys, options: [])
+            folderViewerItems = urls.compactMap { url in
+                let values = try? url.resourceValues(forKeys: Set(keys))
+                if values?.isSymbolicLink == true { return nil }
+                guard isInside(url, root: session.root) else { return nil }
+                return LocalFileItem(
+                    url: url,
+                    name: url.lastPathComponent,
+                    isDirectory: values?.isDirectory == true,
+                    size: Int64(values?.fileSize ?? 0),
+                    modified: values?.contentModificationDate ?? .distantPast
+                )
+            }
+            .sorted {
+                if $0.isDirectory != $1.isDirectory { return $0.isDirectory && !$1.isDirectory }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        } catch {
+            folderViewerItems = []
+            statusMessage = "Duyet .k3folder that bai: \(error.localizedDescription)"
+        }
+    }
+
     private func preflightFolderForPackage(_ folder: URL) throws -> Int {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
@@ -970,6 +1124,37 @@ final class AppState: ObservableObject {
 
     private func isEncryptedVaultFile(_ url: URL) -> Bool {
         ["k3enc", "k3folder"].contains(url.pathExtension.lowercased())
+    }
+
+    private func availableCopyURL(for url: URL, isDirectory: Bool) -> URL {
+        if !FileManager.default.fileExists(atPath: url.path) { return url }
+        let directory = url.deletingLastPathComponent()
+        let ext = isDirectory ? "" : url.pathExtension
+        let base = ext.isEmpty ? url.lastPathComponent : url.deletingPathExtension().lastPathComponent
+        var index = 1
+        while true {
+            let candidate = ext.isEmpty
+                ? directory.appendingPathComponent("\(base) (\(index))", isDirectory: isDirectory)
+                : directory.appendingPathComponent("\(base) (\(index))").appendingPathExtension(ext)
+            if !FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+            index += 1
+        }
+    }
+
+    private func isInside(_ url: URL, root: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        let rootPath = root.standardizedFileURL.path
+        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        return path == rootPath || path.hasPrefix(prefix)
+    }
+
+    private func relativePath(from url: URL, root: URL) -> String? {
+        let path = url.standardizedFileURL.path
+        let rootPath = root.standardizedFileURL.path
+        guard path != rootPath else { return nil }
+        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        guard path.hasPrefix(prefix) else { return nil }
+        return String(path.dropFirst(prefix.count))
     }
 
     private func sanitizedFileName(_ value: String) -> String {

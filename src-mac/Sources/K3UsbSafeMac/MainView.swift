@@ -6,6 +6,7 @@ struct MainView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedItem: VaultItem?
     @State private var selectedLocalItem: LocalFileItem?
+    @State private var selectedViewerItem: LocalFileItem?
     @State private var selectedFinding: ScanFinding?
     @State private var selectedQuarantine: QuarantineItem?
     @State private var selectedTrusted: TrustedFileEntry?
@@ -71,6 +72,10 @@ struct MainView: View {
             }
         }
         .onAppear { appState.reloadFeatureData() }
+        .onDisappear { appState.cleanupFolderPackageViewer() }
+        .onChange(of: appState.isViewingFolderPackage) { _ in
+            selectedViewerItem = nil
+        }
     }
 
     private var header: some View {
@@ -224,10 +229,16 @@ struct MainView: View {
                 }
                 .buttonStyle(.bordered)
                 Spacer()
-                Button { showingDecryptFolder = true } label: {
-                    Label("Giai ma muc chon", systemImage: "lock.open")
+                Button {
+                    if appState.isViewingFolderPackage {
+                        appState.copyFolderViewerSelectionToBrowser(selectedViewerItem)
+                    } else {
+                        showingDecryptFolder = true
+                    }
+                } label: {
+                    Label(appState.isViewingFolderPackage ? "Copy tu viewer" : "Giai ma muc chon", systemImage: appState.isViewingFolderPackage ? "doc.on.doc" : "lock.open")
                 }
-                .disabled(selectedItem == nil)
+                .disabled(appState.isViewingFolderPackage ? selectedViewerItem == nil : selectedItem == nil)
                 Button { appState.refreshVault() } label: {
                     Label("Nap lai ket", systemImage: "arrow.clockwise")
                 }
@@ -322,7 +333,11 @@ struct MainView: View {
             .disabled(selectedLocalItem == nil)
 
             Button {
-                appState.decryptVaultSelectionToBrowser(selectedItem)
+                if appState.isViewingFolderPackage {
+                    appState.copyFolderViewerSelectionToBrowser(selectedViewerItem)
+                } else {
+                    appState.decryptVaultSelectionToBrowser(selectedItem)
+                }
             } label: {
                 VStack(spacing: 6) {
                     Image(systemName: "arrow.left")
@@ -333,13 +348,13 @@ struct MainView: View {
                 .frame(width: 82, height: 62)
             }
             .buttonStyle(.bordered)
-            .disabled(selectedItem == nil)
+            .disabled(appState.isViewingFolderPackage ? selectedViewerItem == nil : selectedItem == nil)
 
             Divider()
                 .padding(.vertical, 4)
 
             MetricPill(value: "\(appState.localItems.count)", title: "ngoai")
-            MetricPill(value: "\(appState.vaultFiles.count)", title: "ket")
+            MetricPill(value: "\(appState.isViewingFolderPackage ? appState.folderViewerItems.count : appState.vaultFiles.count)", title: "ket")
             Spacer()
         }
         .padding(.vertical, 16)
@@ -348,14 +363,50 @@ struct MainView: View {
 
     private var vaultBrowserPane: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(
-                title: "Tep trong ket",
-                subtitle: appState.isDecoyMode ? ".vault_decoy" : ".vault"
-            )
+            HStack {
+                SectionHeader(
+                    title: appState.isViewingFolderPackage ? "Dang xem .k3folder" : "Tep trong ket",
+                    subtitle: appState.isViewingFolderPackage ? appState.folderViewerPath : (appState.isDecoyMode ? ".vault_decoy" : ".vault")
+                )
+                Spacer()
+                if appState.isViewingFolderPackage {
+                    Button {
+                        appState.goToFolderViewerParent()
+                    } label: {
+                        Label("..", systemImage: "arrow.uturn.left")
+                    }
+                    .help("Len thu muc cha; neu o goc package thi quay lai ket")
+                    Button {
+                        appState.leaveFolderPackageViewer()
+                    } label: {
+                        Label("Back", systemImage: "arrow.left")
+                    }
+                }
+            }
             .padding(.horizontal, 16)
             .padding(.top, 10)
 
-            if appState.vaultFiles.isEmpty {
+            if appState.isViewingFolderPackage {
+                if appState.folderViewerItems.isEmpty {
+                    EmptyStateView(
+                        icon: "folder",
+                        title: "Thu muc package dang trong",
+                        message: "Bam '..' hoac Back de quay lai ket.",
+                        primaryTitle: "Back",
+                        primaryIcon: "arrow.left"
+                    ) {
+                        appState.leaveFolderPackageViewer()
+                    }
+                } else {
+                    List(appState.folderViewerItems, selection: $selectedViewerItem) { item in
+                        LocalFileRow(item: item)
+                            .tag(item)
+                            .onTapGesture(count: 2) {
+                                appState.openFolderViewerItem(item)
+                            }
+                    }
+                }
+            } else if appState.vaultFiles.isEmpty {
                 EmptyStateView(
                     icon: "tray",
                     title: "Ket dang trong",
@@ -369,6 +420,12 @@ struct MainView: View {
                 List(appState.vaultFiles, selection: $selectedItem) { item in
                     VaultRow(item: item)
                         .tag(item)
+                        .onTapGesture(count: 2) {
+                            selectedItem = item
+                            if item.isFolderPackage {
+                                appState.openFolderPackageViewer(item)
+                            }
+                        }
                         .onDrag {
                             NSItemProvider(object: item.url as NSURL)
                         }
