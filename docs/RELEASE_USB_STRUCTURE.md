@@ -70,6 +70,20 @@ scripts/build-release-usb-mac.sh --usb /Volumes/USB-DATA
 
 This builds `src-mac`, refreshes `K3 Mac.app`, `mac/K3UsbSafeMac`, `Chay_Mac.command`, README, K3 rules, and `.k3_integrity_manifest.json`. It does not delete `.vault`, `.vault_decoy`, `.vault_config.json`, quarantine, history, or existing ClamAV portable tools on the USB.
 
+Quick release from Windows:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\build-release-usb-windows.ps1
+```
+
+Update a USB target from Windows without deleting vault data:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\build-release-usb-windows.ps1 -UsbPath E:\
+```
+
+This builds `src-csharp\AnToanUSB.exe` and `src-csharp\K3AutoLauncher.exe`, prepares `dist\USB-An-Toan-K3-Windows`, creates `dist\USB-An-Toan-K3-Windows.zip`, copies Windows launcher, rules, ClamAV installer helpers, README, and writes `.k3_integrity_manifest.json` plus `K3_RELEASE_REPORT_WINDOWS.txt`. When `-UsbPath` is used, it updates app/tools only and does not delete `.vault`, `.vault_decoy`, `.vault_config.json`, quarantine, trusted hashes, `BaoMat`, or existing ClamAV database.
+
 1. Build macOS:
 
 ```bash

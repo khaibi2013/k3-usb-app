@@ -37,7 +37,7 @@ Muc tieu: on dinh ban ban dau, khong lam mat du lieu.
 - [x] Clone detection warning.
 - [ ] Branding package per customer.
 - [x] Version/changelog screen.
-- [ ] Windows and macOS release builder.
+- [x] Windows and macOS release builder.
 - [x] QA release report.
 
 ## Phase 5 - UX And Localization
