@@ -651,6 +651,10 @@ namespace AnToanUSB
             menuFunction.DropDownItems.Add(mnuHistory);
             menuFunction.DropDownItems.Add(mnuScanner);
             menuFunction.DropDownItems.Add(mnuRescue);
+
+            var mnuVersion = new ToolStripMenuItem("Phien ban / Changelog");
+            mnuVersion.Click += (s, e) => new VersionForm().ShowDialog(this);
+            menuHelp.DropDownItems.Add(mnuVersion);
             
             menuStrip.Items.AddRange(new ToolStripItem[] { menuSelection, menuFunction, menuHelp });
             Theme.StyleMenuStrip(menuStrip);

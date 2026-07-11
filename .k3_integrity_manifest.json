@@ -1,11 +1,11 @@
 ﻿{
     "version":  1,
-    "generated_at":  "2026-07-11T01:29:52.4078918Z",
+    "generated_at":  "2026-07-11T01:38:11.5729133Z",
     "files":  [
                   {
                       "path":  "AnToanUSB.exe",
-                      "sha256":  "d7c18d8e3f358b620b638db2ef9c8255c7e4d0092e4ce2c1777a094fddc04a2d",
-                      "size":  282624
+                      "sha256":  "285511c64912ce6931ef87480e307ba9f0cf0800b9d1c15893a89d1df37ec9aa",
+                      "size":  290816
                   },
                   {
                       "path":  "tools/rules/k3-rules.json",

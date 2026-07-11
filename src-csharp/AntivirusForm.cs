@@ -166,6 +166,8 @@ namespace AnToanUSB
             lvQuarantine.Columns.Add("Ngày cách ly", 150);
             lvQuarantine.Columns.Add("Dấu hiệu", 180);
             lvQuarantine.Columns.Add("Tệp cách ly", 240);
+            lvQuarantine.Columns.Add("Size", 90);
+            lvQuarantine.Columns.Add("SHA-256", 220);
             Button btnQTrust = new Button { Text = "Tin cay & khoi phuc", Location = new Point(530, 10), Width = 150, Height = 35, FlatStyle = FlatStyle.Flat, BackColor = Color.White, Font = btnFont };
             tabQuarantine.Controls.AddRange(new Control[] { btnQReload, btnQRestore, btnQDelete, btnQOpen, btnQTrust, lvQuarantine });
 
@@ -301,6 +303,9 @@ namespace AnToanUSB
                     return;
                 }
 
+                ExportScanReport(lvResults);
+                return;
+#if false
                 using (var sfd = new SaveFileDialog {
                     Title = "Xuất báo cáo quét mã độc",
                     FileName = "K3AV_Report_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv",
@@ -322,6 +327,7 @@ namespace AnToanUSB
                     AddLog("INFO", "Đã xuất báo cáo: " + sfd.FileName);
                     MessageBox.Show("Đã xuất báo cáo quét mã độc.", "Xuất báo cáo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
+#endif
             };
 
             btnSelectAll.Click += (s, e) => {
@@ -521,9 +527,88 @@ namespace AnToanUSB
             lvLog.Items.Insert(0, item);
         }
 
+        private void ExportScanReport(ListView results)
+        {
+            using (SaveFileDialog sfd = new SaveFileDialog
+            {
+                Title = "Xuat bao cao quet ma doc",
+                FileName = "K3AV_Report_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".html",
+                Filter = "HTML report (*.html)|*.html|CSV UTF-8 (*.csv)|*.csv|PDF backlog (*.pdf)|*.pdf"
+            })
+            {
+                if (sfd.ShowDialog(this) != DialogResult.OK) return;
+
+                string outputPath = sfd.FileName;
+                if (sfd.FilterIndex == 2)
+                {
+                    File.WriteAllText(outputPath, BuildCsvReport(results), new UTF8Encoding(true));
+                }
+                else
+                {
+                    if (sfd.FilterIndex == 3) outputPath = Path.ChangeExtension(outputPath, ".html");
+                    File.WriteAllText(outputPath, BuildHtmlReport(results), new UTF8Encoding(false));
+                }
+
+                AddLog("INFO", "Da xuat bao cao: " + outputPath);
+                string message = sfd.FilterIndex == 3
+                    ? "PDF la backlog tren WinForms hien tai. Da xuat HTML thay the:\n" + outputPath
+                    : "Da xuat bao cao:\n" + outputPath;
+                MessageBox.Show(message, "Xuat bao cao", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private string BuildCsvReport(ListView results)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("Ten tep,Duong dan,Trang thai,Dau hieu");
+            foreach (ListViewItem item in results.Items)
+            {
+                sb.AppendLine(string.Format("\"{0}\",\"{1}\",\"{2}\",\"{3}\"",
+                    EscapeCsv(item.SubItems[1].Text),
+                    EscapeCsv(item.SubItems[2].Text),
+                    EscapeCsv(item.SubItems[3].Text),
+                    EscapeCsv(item.SubItems[4].Text)));
+            }
+            return sb.ToString();
+        }
+
+        private string BuildHtmlReport(ListView results)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("<!doctype html><html><head><meta charset=\"utf-8\"><title>K3 AV Report</title>");
+            sb.AppendLine("<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#1f2937}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d1d5db;padding:8px;text-align:left;font-size:13px}th{background:#0f766e;color:white}.summary{margin:12px 0 18px;padding:12px;background:#f3f4f6}</style>");
+            sb.AppendLine("</head><body>");
+            sb.AppendLine("<h1>USB An Toan K3 - Scan Report</h1>");
+            sb.AppendLine("<div class=\"summary\">");
+            sb.AppendLine("<div>Generated: " + EscapeHtml(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")) + "</div>");
+            sb.AppendLine("<div>Target: " + EscapeHtml(currentScanDir ?? "") + "</div>");
+            sb.AppendLine("<div>Engine: " + EscapeHtml(AntivirusScanner.GetEngineInfo()) + "</div>");
+            sb.AppendLine("<div>Clean=" + cleanCount + " | Infected=" + infectedCount + " | Skipped=" + skippedCount + " | Total=" + totalCount + "</div>");
+            sb.AppendLine("</div>");
+            sb.AppendLine("<table><thead><tr><th>File</th><th>Path</th><th>Status</th><th>Signature</th></tr></thead><tbody>");
+            foreach (ListViewItem item in results.Items)
+            {
+                sb.AppendLine("<tr><td>" + EscapeHtml(item.SubItems[1].Text) + "</td><td>" +
+                    EscapeHtml(item.SubItems[2].Text) + "</td><td>" +
+                    EscapeHtml(item.SubItems[3].Text) + "</td><td>" +
+                    EscapeHtml(item.SubItems[4].Text) + "</td></tr>");
+            }
+            sb.AppendLine("</tbody></table></body></html>");
+            return sb.ToString();
+        }
+
         private string EscapeCsv(string value)
         {
             return (value ?? "").Replace("\"", "\"\"");
+        }
+
+        private string EscapeHtml(string value)
+        {
+            return (value ?? "")
+                .Replace("&", "&amp;")
+                .Replace("<", "&lt;")
+                .Replace(">", "&gt;")
+                .Replace("\"", "&quot;");
         }
 
         private string BuildScanStatsText()
@@ -625,6 +710,7 @@ namespace AnToanUSB
             string id = Guid.NewGuid().ToString();
             string dest = Path.Combine(QuarantineDir, id + ".k3q");
             File.Move(sourceFile, dest);
+            string sha256 = TrustedFileManager.ComputeSha256(dest);
 
             string meta = Path.Combine(QuarantineDir, id + ".meta");
             string[] lines = new string[] {
@@ -632,7 +718,8 @@ namespace AnToanUSB
                 "OriginalName=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(Path.GetFileName(sourceFile))),
                 "VirusName=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(virusName ?? "")),
                 "QuarantineDate=" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-                "Size=" + new FileInfo(dest).Length.ToString()
+                "Size=" + new FileInfo(dest).Length.ToString(),
+                "SHA256=" + sha256
             };
             File.WriteAllLines(meta, lines);
             AddLog("WARN", "Đưa vào khu cách ly: " + sourceFile);
@@ -771,6 +858,9 @@ namespace AnToanUSB
                 string virusName = "Không rõ";
                 string date = File.GetCreationTime(qFile).ToString("dd/MM/yyyy HH:mm:ss");
 
+                string size = new FileInfo(qFile).Length.ToString();
+                string sha256 = TrustedFileManager.ComputeSha256(qFile);
+
                 if (File.Exists(metaFile))
                 {
                     foreach (string line in File.ReadAllLines(metaFile))
@@ -783,10 +873,12 @@ namespace AnToanUSB
                         else if (key == "OriginalName") originalName = DecodeMeta(value);
                         else if (key == "VirusName") virusName = DecodeMeta(value);
                         else if (key == "QuarantineDate") date = value;
+                        else if (key == "Size") size = value;
+                        else if (key == "SHA256") sha256 = value;
                     }
                 }
 
-                var item = new ListViewItem(new[] { "", originalName, originalPath, date, virusName, qFile });
+                var item = new ListViewItem(new[] { "", originalName, originalPath, date, virusName, qFile, size, sha256 });
                 item.Tag = qFile;
                 item.ForeColor = Color.DarkOrange;
                 lvQuarantine.Items.Add(item);
