@@ -615,6 +615,7 @@ namespace AnToanUSB
                     var di = new DirectoryInfo(d);
                     var item = new ListViewItem(new[] { Path.GetFileName(d), "Thư mục", "", Directory.GetLastWriteTime(d).ToString() });
                     item.Tag = d; 
+                    if (IsInK3FolderView(path)) item.SubItems[1].Text = "Thu muc trong package";
                     item.ImageKey = "folder";
                     listRight.Items.Add(item);
                 }
@@ -656,6 +657,7 @@ namespace AnToanUSB
                         var fi = new FileInfo(f);
                         var item = new ListViewItem(new[] { fi.Name, "File Chưa mã hóa", (fi.Length / 1024).ToString() + " KB", fi.LastWriteTime.ToShortDateString() });
                         item.Tag = f;
+                        if (IsInK3FolderView(path)) item.SubItems[1].Text = "File trong package";
                         if (!IsInK3FolderView(path)) item.ForeColor = Color.DarkOrange;
 
                         string ext = Path.GetExtension(f).ToLower();
