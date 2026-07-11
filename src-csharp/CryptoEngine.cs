@@ -13,6 +13,7 @@ namespace AnToanUSB
         private const int IvSize = 16;  // 128 bit
         private const int SaltSize = 16; // 128 bit
         private const int Iterations = 100000;
+        private const int CopyBufferSize = 1024 * 1024;
         private static readonly byte[] CustomMagic = Encoding.ASCII.GetBytes("K3C1");
 
         private static byte[] currentKey;
@@ -51,66 +52,62 @@ namespace AnToanUSB
             byte[] iv = new byte[IvSize];
             using (var rng = new RNGCryptoServiceProvider()) rng.GetBytes(iv);
 
-            byte[] fileData = File.ReadAllBytes(sourceFile);
             byte isCompressed = 0;
-            
-            string ext = Path.GetExtension(sourceFile).ToLower();
-            bool isMedia = ext == ".mp4" || ext == ".zip" || ext == ".jpg" || ext == ".png" || ext == ".mp3" || ext == ".rar";
-
-            if (!isMedia && fileData.Length > 1024)
-            {
-                using (var ms = new MemoryStream())
-                {
-                    using (var gz = new GZipStream(ms, CompressionMode.Compress, true))
-                        gz.Write(fileData, 0, fileData.Length);
-                    fileData = ms.ToArray();
-                    isCompressed = 1;
-                }
-            }
-
-            byte[] encryptedData;
-            using (var aes = new AesManaged { Key = currentKey, IV = iv, Mode = CipherMode.CBC, Padding = PaddingMode.PKCS7 })
-            using (var encryptor = aes.CreateEncryptor(aes.Key, aes.IV))
-            using (var ms = new MemoryStream())
-            {
-                using (var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
-                {
-                    cs.Write(fileData, 0, fileData.Length);
-                }
-                encryptedData = ms.ToArray();
-            }
-
-            // Structure: [IV(16)] [MAC(32)] [IsCompressed(1)] [NameLen(4)] [NameBytes] [Encrypted]
             string baseName = string.IsNullOrWhiteSpace(storedName) ? Path.GetFileName(sourceFile) : storedName;
             byte[] nameBytes = Encoding.UTF8.GetBytes(baseName);
             byte[] nameLenBytes = BitConverter.GetBytes(nameBytes.Length);
+            bool shouldCompress = !IsLikelyCompressedMedia(sourceFile) && new FileInfo(sourceFile).Length > 1024;
+            isCompressed = shouldCompress ? (byte)1 : (byte)0;
 
-            using (var ms = new MemoryStream())
+            string destDir = Path.GetDirectoryName(destFile);
+            if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
+            string tempPayload = destFile + ".payload." + Guid.NewGuid().ToString("N") + ".tmp";
+            string tempFinal = destFile + ".tmp." + Guid.NewGuid().ToString("N");
+
+            try
             {
-                // First, compute MAC over everything EXCEPT IV and MAC itself (or compute over IV+Payload)
-                // Let's compute MAC over [IsCompressed][NameLen][NameBytes][EncryptedData]
-                ms.WriteByte(isCompressed);
-                ms.Write(nameLenBytes, 0, nameLenBytes.Length);
-                ms.Write(nameBytes, 0, nameBytes.Length);
-                ms.Write(encryptedData, 0, encryptedData.Length);
-                
-                byte[] payloadToMac = ms.ToArray();
-                byte[] mac;
-                using (var hmac = new HMACSHA256(currentMacKey))
+                using (var payload = new FileStream(tempPayload, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize))
                 {
-                    byte[] ivAndPayload = new byte[iv.Length + payloadToMac.Length];
-                    Buffer.BlockCopy(iv, 0, ivAndPayload, 0, iv.Length);
-                    Buffer.BlockCopy(payloadToMac, 0, ivAndPayload, iv.Length, payloadToMac.Length);
-                    mac = hmac.ComputeHash(ivAndPayload);
+                    payload.WriteByte(isCompressed);
+                    payload.Write(nameLenBytes, 0, nameLenBytes.Length);
+                    payload.Write(nameBytes, 0, nameBytes.Length);
+
+                    using (var aes = new AesManaged { Key = currentKey, IV = iv, Mode = CipherMode.CBC, Padding = PaddingMode.PKCS7 })
+                    using (var encryptor = aes.CreateEncryptor(aes.Key, aes.IV))
+                    using (var crypto = new CryptoStream(payload, encryptor, CryptoStreamMode.Write))
+                    using (var source = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize))
+                    {
+                        if (shouldCompress)
+                        {
+                            using (var gzip = new GZipStream(crypto, CompressionMode.Compress, true))
+                                CopyStream(source, gzip);
+                        }
+                        else
+                        {
+                            CopyStream(source, crypto);
+                        }
+
+                        crypto.FlushFinalBlock();
+                    }
                 }
 
-                // Final write
-                using (var fs = new FileStream(destFile, FileMode.Create, FileAccess.Write))
+                byte[] mac = ComputeMac(iv, tempPayload);
+
+                using (var output = new FileStream(tempFinal, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize))
                 {
-                    fs.Write(iv, 0, iv.Length);
-                    fs.Write(mac, 0, mac.Length);
-                    fs.Write(payloadToMac, 0, payloadToMac.Length);
+                    output.Write(iv, 0, iv.Length);
+                    output.Write(mac, 0, mac.Length);
+                    using (var payload = new FileStream(tempPayload, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize))
+                        CopyStream(payload, output);
                 }
+
+                if (File.Exists(destFile)) File.Delete(destFile);
+                File.Move(tempFinal, destFile);
+            }
+            finally
+            {
+                TryDelete(tempPayload);
+                TryDelete(tempFinal);
             }
         }
 
@@ -296,72 +293,64 @@ namespace AnToanUSB
         {
             if (!IsAuthenticated) throw new UnauthorizedAccessException("Not authenticated.");
 
-            byte[] allData = File.ReadAllBytes(sourceFile);
-            if (allData.Length < IvSize + MacSize + 1 + 4) throw new Exception("Invalid file format.");
-
-            byte[] iv = new byte[IvSize];
-            Array.Copy(allData, 0, iv, 0, IvSize);
-            
-            byte[] mac = new byte[MacSize];
-            Array.Copy(allData, IvSize, mac, 0, MacSize);
-
-            int payloadOffset = IvSize + MacSize;
-            int payloadSize = allData.Length - payloadOffset;
-            byte[] payload = new byte[payloadSize];
-            Array.Copy(allData, payloadOffset, payload, 0, payloadSize);
-
-            // Verify MAC
-            using (var hmac = new HMACSHA256(currentMacKey))
+            using (var fs = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize))
             {
-                byte[] ivAndPayload = new byte[iv.Length + payload.Length];
-                Buffer.BlockCopy(iv, 0, ivAndPayload, 0, iv.Length);
-                Buffer.BlockCopy(payload, 0, ivAndPayload, iv.Length, payload.Length);
-                
-                byte[] computedMac = hmac.ComputeHash(ivAndPayload);
-                for (int i = 0; i < MacSize; i++)
-                    if (mac[i] != computedMac[i])
-                        throw new Exception("File integrity check failed (MAC mismatch).");
-            }
+                if (fs.Length < IvSize + MacSize + 1 + 4) throw new Exception("Invalid file format.");
 
-            int offset = 0;
-            byte isCompressed = payload[offset];
-            offset += 1;
+                byte[] iv = ReadExact(fs, IvSize);
+                byte[] mac = ReadExact(fs, MacSize);
 
-            int nameLen = BitConverter.ToInt32(payload, offset);
-            offset += 4;
-
-            string fileName = Encoding.UTF8.GetString(payload, offset, nameLen);
-            offset += nameLen;
-
-            int encDataSize = payloadSize - offset;
-            byte[] encData = new byte[encDataSize];
-            Array.Copy(payload, offset, encData, 0, encDataSize);
-
-            byte[] decryptedData;
-            using (var aes = new AesManaged { Key = currentKey, IV = iv, Mode = CipherMode.CBC, Padding = PaddingMode.PKCS7 })
-            using (var decryptor = aes.CreateDecryptor(aes.Key, aes.IV))
-            using (var ms = new MemoryStream(encData))
-            using (var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read))
-            using (var outMs = new MemoryStream())
-            {
-                cs.CopyTo(outMs);
-                decryptedData = outMs.ToArray();
-            }
-
-            if (isCompressed == 1)
-            {
-                using (var ms = new MemoryStream(decryptedData))
-                using (var gz = new GZipStream(ms, CompressionMode.Decompress))
-                using (var outMs = new MemoryStream())
+                using (var hmac = new HMACSHA256(currentMacKey))
                 {
-                    gz.CopyTo(outMs);
-                    decryptedData = outMs.ToArray();
+                    hmac.TransformBlock(iv, 0, iv.Length, null, 0);
+                    byte[] buffer = new byte[CopyBufferSize];
+                    int read;
+                    while ((read = fs.Read(buffer, 0, buffer.Length)) > 0)
+                        hmac.TransformBlock(buffer, 0, read, null, 0);
+                    hmac.TransformFinalBlock(new byte[0], 0, 0);
+
+                    int diff = 0;
+                    byte[] computedMac = hmac.Hash;
+                    for (int i = 0; i < MacSize; i++) diff |= mac[i] ^ computedMac[i];
+                    if (diff != 0) throw new Exception("File integrity check failed (MAC mismatch).");
+                }
+
+                fs.Position = IvSize + MacSize;
+                byte isCompressed = (byte)fs.ReadByte();
+                byte[] nameLenBytes = ReadExact(fs, 4);
+                int nameLen = BitConverter.ToInt32(nameLenBytes, 0);
+                if (nameLen < 0 || nameLen > 1024 * 1024) throw new Exception("Invalid metadata.");
+                string fileName = Encoding.UTF8.GetString(ReadExact(fs, nameLen));
+                string destFile = SafeDestinationPath(destDir, fileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(destFile));
+                string tempDest = destFile + ".tmp." + Guid.NewGuid().ToString("N");
+
+                try
+                {
+                    using (var aes = new AesManaged { Key = currentKey, IV = iv, Mode = CipherMode.CBC, Padding = PaddingMode.PKCS7 })
+                    using (var decryptor = aes.CreateDecryptor(aes.Key, aes.IV))
+                    using (var crypto = new CryptoStream(fs, decryptor, CryptoStreamMode.Read))
+                    using (var output = new FileStream(tempDest, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize))
+                    {
+                        if (isCompressed == 1)
+                        {
+                            using (var gzip = new GZipStream(crypto, CompressionMode.Decompress))
+                                CopyStream(gzip, output);
+                        }
+                        else
+                        {
+                            CopyStream(crypto, output);
+                        }
+                    }
+
+                    if (File.Exists(destFile)) File.Delete(destFile);
+                    File.Move(tempDest, destFile);
+                }
+                finally
+                {
+                    TryDelete(tempDest);
                 }
             }
-
-            string destFile = SafeDestinationPath(destDir, fileName);
-            Directory.CreateDirectory(Path.GetDirectoryName(destFile));
-            File.WriteAllBytes(destFile, decryptedData);
         }
 
         private static string SafeDestinationPath(string destDir, string fileName)
@@ -389,65 +378,103 @@ namespace AnToanUSB
         {
             if (!IsAuthenticated) throw new UnauthorizedAccessException("Not authenticated.");
 
-            byte[] allData = File.ReadAllBytes(sourceFile);
-            if (allData.Length < IvSize + MacSize + 1 + 4) throw new Exception("Invalid file format.");
-
-            byte[] iv = new byte[IvSize];
-            Array.Copy(allData, 0, iv, 0, IvSize);
-
-            byte[] mac = new byte[MacSize];
-            Array.Copy(allData, IvSize, mac, 0, MacSize);
-
-            int payloadOffset = IvSize + MacSize;
-            int payloadSize = allData.Length - payloadOffset;
-            byte[] payload = new byte[payloadSize];
-            Array.Copy(allData, payloadOffset, payload, 0, payloadSize);
-
-            using (var hmac = new HMACSHA256(currentMacKey))
+            using (var fs = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize))
             {
-                byte[] ivAndPayload = new byte[iv.Length + payload.Length];
-                Buffer.BlockCopy(iv, 0, ivAndPayload, 0, iv.Length);
-                Buffer.BlockCopy(payload, 0, ivAndPayload, iv.Length, payload.Length);
+                if (fs.Length < IvSize + MacSize + 1 + 4) throw new Exception("Invalid file format.");
 
-                byte[] computedMac = hmac.ComputeHash(ivAndPayload);
-                int diff = 0;
-                for (int i = 0; i < MacSize; i++) diff |= mac[i] ^ computedMac[i];
-                if (diff != 0) throw new Exception("File integrity check failed (MAC mismatch).");
-            }
+                byte[] iv = ReadExact(fs, IvSize);
+                byte[] mac = ReadExact(fs, MacSize);
 
-            int offset = 0;
-            byte isCompressed = payload[offset];
-            offset += 1;
-
-            int nameLen = BitConverter.ToInt32(payload, offset);
-            offset += 4;
-            if (nameLen < 0 || offset + nameLen > payload.Length) throw new Exception("Invalid metadata.");
-            offset += nameLen;
-
-            int encDataSize = payloadSize - offset;
-            byte[] encData = new byte[encDataSize];
-            Array.Copy(payload, offset, encData, 0, encDataSize);
-
-            byte[] decryptedData;
-            using (var aes = new AesManaged { Key = currentKey, IV = iv, Mode = CipherMode.CBC, Padding = PaddingMode.PKCS7 })
-            using (var decryptor = aes.CreateDecryptor(aes.Key, aes.IV))
-            using (var ms = new MemoryStream(encData))
-            using (var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read))
-            using (var outMs = new MemoryStream())
-            {
-                cs.CopyTo(outMs);
-                decryptedData = outMs.ToArray();
-            }
-
-            if (isCompressed == 1)
-            {
-                using (var ms = new MemoryStream(decryptedData))
-                using (var gz = new GZipStream(ms, CompressionMode.Decompress))
-                using (var outMs = new MemoryStream())
+                using (var hmac = new HMACSHA256(currentMacKey))
                 {
-                    gz.CopyTo(outMs);
+                    hmac.TransformBlock(iv, 0, iv.Length, null, 0);
+                    byte[] buffer = new byte[CopyBufferSize];
+                    int read;
+                    while ((read = fs.Read(buffer, 0, buffer.Length)) > 0)
+                        hmac.TransformBlock(buffer, 0, read, null, 0);
+                    hmac.TransformFinalBlock(new byte[0], 0, 0);
+
+                    int diff = 0;
+                    byte[] computedMac = hmac.Hash;
+                    for (int i = 0; i < MacSize; i++) diff |= mac[i] ^ computedMac[i];
+                    if (diff != 0) throw new Exception("File integrity check failed (MAC mismatch).");
+                }
+
+                fs.Position = IvSize + MacSize;
+                byte isCompressed = (byte)fs.ReadByte();
+                byte[] nameLenBytes = ReadExact(fs, 4);
+                int nameLen = BitConverter.ToInt32(nameLenBytes, 0);
+                if (nameLen < 0 || nameLen > 1024 * 1024) throw new Exception("Invalid metadata.");
+                ReadExact(fs, nameLen);
+
+                using (var aes = new AesManaged { Key = currentKey, IV = iv, Mode = CipherMode.CBC, Padding = PaddingMode.PKCS7 })
+                using (var decryptor = aes.CreateDecryptor(aes.Key, aes.IV))
+                using (var crypto = new CryptoStream(fs, decryptor, CryptoStreamMode.Read))
+                {
+                    if (isCompressed == 1)
+                    {
+                        using (var gzip = new GZipStream(crypto, CompressionMode.Decompress))
+                            CopyStream(gzip, Stream.Null);
+                    }
+                    else
+                    {
+                        CopyStream(crypto, Stream.Null);
+                    }
                 }
             }
+        }
+
+        private static bool IsLikelyCompressedMedia(string path)
+        {
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext == ".mp4" || ext == ".m4v" || ext == ".mov" || ext == ".avi" ||
+                   ext == ".zip" || ext == ".rar" || ext == ".7z" || ext == ".gz" ||
+                   ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" ||
+                   ext == ".mp3" || ext == ".aac" || ext == ".flac" || ext == ".wav" ||
+                   ext == ".pdf";
+        }
+
+        private static byte[] ComputeMac(byte[] iv, string payloadPath)
+        {
+            using (var hmac = new HMACSHA256(currentMacKey))
+            {
+                hmac.TransformBlock(iv, 0, iv.Length, null, 0);
+                using (var payload = new FileStream(payloadPath, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize))
+                {
+                    byte[] buffer = new byte[CopyBufferSize];
+                    int read;
+                    while ((read = payload.Read(buffer, 0, buffer.Length)) > 0)
+                        hmac.TransformBlock(buffer, 0, read, null, 0);
+                }
+                hmac.TransformFinalBlock(new byte[0], 0, 0);
+                return hmac.Hash;
+            }
+        }
+
+        private static void CopyStream(Stream source, Stream destination)
+        {
+            byte[] buffer = new byte[CopyBufferSize];
+            int read;
+            while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+                destination.Write(buffer, 0, read);
+        }
+
+        private static byte[] ReadExact(Stream source, int count)
+        {
+            byte[] buffer = new byte[count];
+            int offset = 0;
+            while (offset < count)
+            {
+                int read = source.Read(buffer, offset, count - offset);
+                if (read <= 0) throw new EndOfStreamException("Invalid file format.");
+                offset += read;
+            }
+            return buffer;
+        }
+
+        private static void TryDelete(string path)
+        {
+            try { if (!string.IsNullOrEmpty(path) && File.Exists(path)) File.Delete(path); } catch { }
         }
 
         public static void SecureShredFile(string filePath)

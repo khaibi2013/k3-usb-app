@@ -334,11 +334,63 @@ namespace AnToanUSB
             
             int start = json.IndexOf("\"", idx + searchKey.Length);
             if (start == -1) return "";
-            
-            int end = json.IndexOf("\"", start + 1);
-            if (end == -1) return "";
-            
-            return json.Substring(start + 1, end - start - 1);
+
+            StringBuilder value = new StringBuilder();
+            bool escaped = false;
+            for (int i = start + 1; i < json.Length; i++)
+            {
+                char c = json[i];
+                if (escaped)
+                {
+                    switch (c)
+                    {
+                        case '"': value.Append('"'); break;
+                        case '\\': value.Append('\\'); break;
+                        case '/': value.Append('/'); break;
+                        case 'b': value.Append('\b'); break;
+                        case 'f': value.Append('\f'); break;
+                        case 'n': value.Append('\n'); break;
+                        case 'r': value.Append('\r'); break;
+                        case 't': value.Append('\t'); break;
+                        case 'u':
+                            if (i + 4 < json.Length)
+                            {
+                                string hex = json.Substring(i + 1, 4);
+                                int code;
+                                if (int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out code))
+                                {
+                                    value.Append((char)code);
+                                    i += 4;
+                                }
+                                else
+                                {
+                                    value.Append(c);
+                                }
+                            }
+                            else
+                            {
+                                value.Append(c);
+                            }
+                            break;
+                        default:
+                            value.Append(c);
+                            break;
+                    }
+                    escaped = false;
+                    continue;
+                }
+
+                if (c == '\\')
+                {
+                    escaped = true;
+                    continue;
+                }
+
+                if (c == '"') return value.ToString();
+                value.Append(c);
+            }
+
+            return "";
         }
 
         private static bool ExtractJsonBool(string json, string key)

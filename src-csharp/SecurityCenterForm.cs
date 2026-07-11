@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace AnToanUSB
@@ -101,7 +102,9 @@ namespace AnToanUSB
             string launcher = Path.Combine(baseDir, "AutoLauncher", "K3AutoLauncher.exe");
             string installLauncher = Path.Combine(baseDir, "AutoLauncher", "CaiDat-AutoLauncher.bat");
 
-            int encryptedCount = Directory.Exists(vaultPath) ? Directory.GetFiles(vaultPath, "*.k3enc", SearchOption.AllDirectories).Length : 0;
+            int encryptedCount = Directory.Exists(vaultPath)
+                ? Directory.GetFiles(vaultPath, "*", SearchOption.AllDirectories).Count(IsK3EncryptedFile)
+                : 0;
             bool readOnlyEnabled = UsbHelper.IsReadOnlyEnabled();
             bool canWrite = UsbHelper.CanWriteToCurrentAppDrive();
             K3IntegrityResult integrity = K3IntegrityManager.VerifyManifest();
@@ -117,7 +120,7 @@ namespace AnToanUSB
             AddStatus("Logo USB", File.Exists(icon), File.Exists(icon) ? "Da co" : "Thieu icon.png", "Can de man hinh splash/login dep hon.");
             AddStatus("K3 AutoLauncher", File.Exists(launcher) && File.Exists(installLauncher), File.Exists(launcher) ? "Da dong goi" : "Chua co", "Cai tren may can tu mo khi cam USB.");
             AddStatus("Toan ven app/rules", !integrity.HasWarning, IntegrityStatusText(integrity), IntegritySuggestionText(integrity));
-            AddStatus("Tep ma hoa", encryptedCount > 0, encryptedCount + " tep .k3enc", encryptedCount > 0 ? "Co du lieu trong ket." : "Hay dua file vao BaoMat hoac Ket sat.");
+            AddStatus("Tep ma hoa", encryptedCount > 0, encryptedCount + " tep .k3enc/.k3folder", encryptedCount > 0 ? "Co du lieu trong ket." : "Hay dua file vao BaoMat hoac Ket sat.");
             AddStatus("Che do truy cap", !ConfigManager.IsDecoyMode, ConfigManager.IsDecoyMode ? "Ket gia" : "Ket that", ConfigManager.IsDecoyMode ? "Dang quan ly ket gia." : "Dang quan ly ket that.");
 
             lblSummary.Text = string.Format("{0} file ma hoa | HWID: {1} | Read-only: {2} | Ghi thu: {3}",
@@ -157,7 +160,7 @@ namespace AnToanUSB
                 return;
             }
 
-            string[] files = Directory.GetFiles(vaultPath, "*.k3enc", SearchOption.AllDirectories);
+            string[] files = Directory.GetFiles(vaultPath, "*", SearchOption.AllDirectories).Where(IsK3EncryptedFile).ToArray();
             if (files.Length == 0)
             {
                 MessageBox.Show("Ket sat chua co tep ma hoa de kiem tra.", "Kiem tra toan ven", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -196,6 +199,13 @@ namespace AnToanUSB
                 MessageBox.Show(string.Format("Da kiem tra {0} tep. Toan bo hop le.", ok), "Kiem tra toan ven", MessageBoxButtons.OK, MessageBoxIcon.Information);
             else
                 MessageBox.Show(string.Format("Hop le: {0}\nLoi: {1}\n\nLoi dau tien: {2}", ok, bad, firstError), "Canh bao toan ven", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
+        private bool IsK3EncryptedFile(string path)
+        {
+            return path != null &&
+                (path.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase) ||
+                 path.EndsWith(".k3folder", StringComparison.OrdinalIgnoreCase));
         }
     }
 }

@@ -17,6 +17,7 @@ namespace AnToanUSB
         private Panel pnlConnectionDot;
         private bool isConnected;
         private PictureBox picShield;
+        private bool setupPromptShown;
 
         public LoginForm()
         {
@@ -24,6 +25,7 @@ namespace AnToanUSB
             InitializeComponent();
             ApplyLanguage();
             LanguageManager.LanguageChanged += ApplyLanguage;
+            this.Shown += (s, e) => PromptInitialSetupIfNeeded();
         }
 
         private void InitializeComponent()
@@ -127,6 +129,20 @@ namespace AnToanUSB
             Thread.Sleep(180);
             this.DialogResult = DialogResult.OK;
             this.Close();
+        }
+
+        private void PromptInitialSetupIfNeeded()
+        {
+            if (setupPromptShown) return;
+            ConfigManager.LoadConfig();
+            if (!ConfigManager.NeedsInitialSetup) return;
+
+            setupPromptShown = true;
+            if (ShowInitialSetup())
+            {
+                CryptoEngine.Authenticate(txtPassword.Text);
+                CompleteSuccessfulLogin();
+            }
         }
 
         private void ApplyLanguage()

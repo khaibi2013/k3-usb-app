@@ -8,12 +8,27 @@ using System.Linq;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
+using System.IO.Compression;
 
 namespace AnToanUSB
 {
     public class MainForm : Form
     {
         private enum SelectionMode { All, None, Invert, Encrypted, Plain }
+
+        private class VaultImportResult
+        {
+            public int Count;
+            public readonly List<string> Skipped = new List<string>();
+        }
+
+        private class FolderImportPlan
+        {
+            public readonly List<string> Directories = new List<string>();
+            public readonly List<string> Files = new List<string>();
+            public readonly List<string> Errors = new List<string>();
+        }
 
         private MenuStrip menuStrip;
         private ToolStripMenuItem menuSelection;
@@ -305,11 +320,23 @@ namespace AnToanUSB
             string realVault = Path.GetFullPath(Path.Combine(basePath, ".vault"));
             string decoyVault = Path.GetFullPath(Path.Combine(basePath, ".vault_decoy"));
 
-            if (fullPath.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase)) return true;
+            if (IsK3EncryptedFile(fullPath)) return true;
             if (IsInsidePath(fullPath, realVault) || IsInsidePath(fullPath, decoyVault)) return true;
             if (string.Equals(fullPath, Path.GetFullPath(Application.ExecutablePath), StringComparison.OrdinalIgnoreCase)) return true;
             if (string.Equals(Path.GetFileName(fullPath), ".vault_config.json", StringComparison.OrdinalIgnoreCase)) return true;
             return false;
+        }
+
+        private bool IsK3EncryptedFile(string path)
+        {
+            return path != null &&
+                (path.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase) ||
+                 path.EndsWith(".k3folder", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private bool IsK3FolderPackage(string path)
+        {
+            return path != null && path.EndsWith(".k3folder", StringComparison.OrdinalIgnoreCase);
         }
 
         private bool IsInsidePath(string filePath, string directoryPath)
@@ -499,7 +526,16 @@ namespace AnToanUSB
 
                 foreach (var f in Directory.GetFiles(path))
                 {
-                    if (f.EndsWith(".k3enc"))
+                    if (IsK3FolderPackage(f))
+                    {
+                        var fi = new FileInfo(f);
+                        string originalName = Path.GetFileNameWithoutExtension(f);
+                        var item = new ListViewItem(new[] { originalName, "Folder Package", (fi.Length / 1024).ToString() + " KB", fi.LastWriteTime.ToShortDateString() });
+                        item.Tag = f;
+                        item.ImageKey = "folder";
+                        listRight.Items.Add(item);
+                    }
+                    else if (f.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase))
                     {
                         var fi = new FileInfo(f);
                         string originalName = Path.GetFileNameWithoutExtension(f); 
@@ -913,7 +949,7 @@ namespace AnToanUSB
                         {
                             string p = selected.Tag != null ? selected.Tag.ToString() : "";
                             if (!File.Exists(p)) continue;
-                            if (p.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase)) continue;
+                            if (IsK3EncryptedFile(p)) continue;
                             string dest = GetAvailablePath(p + ".k3enc");
                             EncryptAndVerifyFile(p, dest);
                             CryptoEngine.SecureShredFile(p);
@@ -929,7 +965,7 @@ namespace AnToanUSB
                 if (listMiddle.SelectedItems.Count > 0) {
                     try {
                         string p = listMiddle.SelectedItems[0].Tag.ToString();
-                        if (File.Exists(p) && p.EndsWith(".k3enc")) {
+                        if (File.Exists(p) && IsK3EncryptedFile(p)) {
                             DecryptAnyEncryptedFile(p, Path.GetDirectoryName(p));
                             File.Delete(p);
                             LoadMiddlePane(currentMiddlePath);
@@ -998,14 +1034,16 @@ namespace AnToanUSB
                 btnTransferLeft.Location = new Point((middlePanel.Width - buttonSize) / 2, (middlePanel.Height / 2) + 10);
             };
             
-            btnTransferRight.Click += (s, e) => {
+            btnTransferRight.Click += async (s, e) => {
                 if (listMiddle.SelectedItems.Count > 0)
                 {
                     try
                     {
                         string targetVaultDir = string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath;
-                        EncryptListSelectionToVault(listMiddle, targetVaultDir);
+                        string[] paths = GetSelectedPaths(listMiddle);
+                        VaultImportResult result = await EncryptPathsToVaultAsync(paths, targetVaultDir, false, "Dang dua file/folder vao Ket sat...");
                         LoadRightPane(currentRightPath);
+                        ShowVaultImportResult(result, "Ma hoa vao Ket sat");
                         MessageBox.Show(LanguageManager.GetString("Ctx_Encrypt") + " thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     catch (Exception ex) { MessageBox.Show("Lỗi mã hóa: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -1022,7 +1060,7 @@ namespace AnToanUSB
                         {
                             string path = item.Tag != null ? item.Tag.ToString() : "";
                             if (File.Exists(path)) {
-                                if (ConfigManager.AutoDecrypt || path.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase)) DecryptAnyEncryptedFile(path, outDir);
+                                if (ConfigManager.AutoDecrypt || IsK3EncryptedFile(path)) DecryptAnyEncryptedFile(path, outDir);
                                 else File.Copy(path, GetAvailablePath(Path.Combine(outDir, Path.GetFileName(path))));
                             }
                             else if (Directory.Exists(path)) {
@@ -1030,7 +1068,7 @@ namespace AnToanUSB
                                 string targetDir = Path.Combine(outDir, folderName);
                                 if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
                                 
-                                foreach (var file in Directory.GetFiles(path, "*.k3enc", SearchOption.AllDirectories))
+                                foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories).Where(IsK3EncryptedFile))
                                 {
                                     string rel = file.Substring(path.Length).TrimStart('\\', '/');
                                     string relDir = Path.GetDirectoryName(rel) ?? "";
@@ -1107,7 +1145,7 @@ namespace AnToanUSB
                         foreach (ListViewItem selected in listRight.SelectedItems)
                         {
                             string p = selected.Tag != null ? selected.Tag.ToString() : "";
-                            if (!File.Exists(p) || p.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase)) continue;
+                            if (!File.Exists(p) || IsK3EncryptedFile(p)) continue;
                             string dest = GetAvailablePath(p + ".k3enc");
                             EncryptAndVerifyFile(p, dest);
                             CryptoEngine.SecureShredFile(p);
@@ -1129,7 +1167,7 @@ namespace AnToanUSB
                         foreach (ListViewItem selected in listRight.SelectedItems)
                         {
                             string p = selected.Tag != null ? selected.Tag.ToString() : "";
-                            if (File.Exists(p) && p.EndsWith(".k3enc")) {
+                            if (File.Exists(p) && IsK3EncryptedFile(p)) {
                                 DecryptAnyEncryptedFile(p, outDir);
                                 count++;
                             }
@@ -1139,7 +1177,7 @@ namespace AnToanUSB
                                 string targetDir = Path.Combine(outDir, folderName);
                                 if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
 
-                                foreach (var file in Directory.GetFiles(p, "*.k3enc", SearchOption.AllDirectories))
+                                foreach (var file in Directory.GetFiles(p, "*", SearchOption.AllDirectories).Where(IsK3EncryptedFile))
                                 {
                                     string rel = file.Substring(p.Length).TrimStart('\\', '/');
                                     string relDir = Path.GetDirectoryName(rel) ?? "";
@@ -1295,10 +1333,10 @@ namespace AnToanUSB
                         select = !item.Selected;
                         break;
                     case SelectionMode.Encrypted:
-                        select = item.Tag != null && item.Tag.ToString().EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase);
+                        select = item.Tag != null && IsK3EncryptedFile(item.Tag.ToString());
                         break;
                     case SelectionMode.Plain:
-                        select = item.Tag != null && File.Exists(item.Tag.ToString()) && !item.Tag.ToString().EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase);
+                        select = item.Tag != null && File.Exists(item.Tag.ToString()) && !IsK3EncryptedFile(item.Tag.ToString());
                         break;
                     default:
                         select = false;
@@ -1389,14 +1427,14 @@ namespace AnToanUSB
             e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
         }
 
-        private void DropPathsToVaultPane(DragEventArgs e)
+        private async void DropPathsToVaultPane(DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             string[] paths = (string[])e.Data.GetData(DataFormats.FileDrop);
             string targetVaultDir = string.IsNullOrEmpty(currentRightPath) ? vaultPath : currentRightPath;
-            int count = EncryptPathsToVault(paths, targetVaultDir, false);
+            VaultImportResult result = await EncryptPathsToVaultAsync(paths, targetVaultDir, false, "Dang keo tha vao Ket sat...");
             LoadRightPane(currentRightPath);
-            MessageBox.Show(string.Format("Đã mã hóa {0} tệp vào Két sắt.", count), "Kéo thả mã hóa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ShowVaultImportResult(result, "Keo tha ma hoa");
         }
 
         private void DropPathsToLocalPane(DragEventArgs e)
@@ -1487,52 +1525,306 @@ namespace AnToanUSB
             EncryptPathsToVault(GetSelectedPaths(list), targetVaultDir, false);
         }
 
-        private int EncryptPathsToVault(IEnumerable<string> paths, string targetVaultDir, bool removeSource)
+        private async Task<VaultImportResult> EncryptPathsToVaultAsync(string[] paths, string targetVaultDir, bool removeSource, string busyText)
+        {
+            if (paths == null || paths.Length == 0) return new VaultImportResult();
+            string oldTitle = Text;
+            Cursor oldCursor = Cursor;
+            bool oldUseWaitCursor = UseWaitCursor;
+            try
+            {
+                Text = busyText;
+                Cursor = Cursors.WaitCursor;
+                UseWaitCursor = true;
+                btnTransferRight.Enabled = false;
+                btnTransferLeft.Enabled = false;
+                listMiddle.Enabled = false;
+                listRight.Enabled = false;
+                return await Task.Run(() => EncryptPathsToVault(paths, targetVaultDir, removeSource, false));
+            }
+            finally
+            {
+                listMiddle.Enabled = true;
+                listRight.Enabled = true;
+                btnTransferRight.Enabled = true;
+                btnTransferLeft.Enabled = true;
+                UseWaitCursor = oldUseWaitCursor;
+                Cursor = oldCursor;
+                Text = oldTitle;
+            }
+        }
+
+        private VaultImportResult EncryptPathsToVault(IEnumerable<string> paths, string targetVaultDir, bool removeSource, bool showThreatMessages = true)
         {
             if (string.IsNullOrEmpty(targetVaultDir)) targetVaultDir = vaultPath;
             Directory.CreateDirectory(targetVaultDir);
 
-            int count = 0;
+            VaultImportResult result = new VaultImportResult();
             foreach (string source in paths)
             {
-                if (File.Exists(source))
+                try
                 {
-                    if (source.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase) && IsInsidePath(source, vaultPath)) continue;
-                    if (!IsFileCleanForUsbImport(source, true)) continue;
-                    string dest = GetAvailablePath(Path.Combine(targetVaultDir, Path.GetFileName(source) + ".k3enc"));
-                    EncryptAndVerifyFile(source, dest);
-                    if (removeSource) CryptoEngine.SecureShredFile(source);
-                    count++;
-                }
-                else if (Directory.Exists(source))
-                {
-                    string folderRoot = GetAvailablePath(Path.Combine(targetVaultDir, Path.GetFileName(source)));
-                    Directory.CreateDirectory(folderRoot);
-                    foreach (string dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
+                    if (File.Exists(source))
                     {
-                        string relDir = dir.Substring(source.Length).TrimStart('\\', '/');
-                        Directory.CreateDirectory(Path.Combine(folderRoot, relDir));
-                    }
-                    bool allFilesAccepted = true;
-                    foreach (string file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
-                    {
-                        if (!IsFileCleanForUsbImport(file, true))
+                        if (IsK3EncryptedFile(source) && IsInsidePath(source, vaultPath))
                         {
-                            allFilesAccepted = false;
+                            result.Skipped.Add(source + " | Da la file trong ket");
                             continue;
                         }
-                        string rel = file.Substring(source.Length).TrimStart('\\', '/');
-                        string storedName = Path.Combine(Path.GetFileName(source), rel).Replace('\\', '/');
-                        string destDir = Path.Combine(folderRoot, Path.GetDirectoryName(rel) ?? "");
-                        Directory.CreateDirectory(destDir);
-                        string dest = GetAvailablePath(Path.Combine(destDir, Path.GetFileName(file) + ".k3enc"));
-                        EncryptAndVerifyFile(file, dest, storedName);
-                        count++;
+                        if (!IsFileCleanForUsbImport(source, showThreatMessages))
+                        {
+                            result.Skipped.Add(source + " | Bi chan boi quet an toan");
+                            continue;
+                        }
+                        string dest = GetAvailablePath(Path.Combine(targetVaultDir, Path.GetFileName(source) + ".k3enc"));
+                        EncryptAndVerifyFile(source, dest);
+                        if (removeSource) TrySecureDeleteFile(source);
+                        result.Count++;
                     }
-                    if (removeSource && allFilesAccepted) SecureDeletePath(source);
+                    else if (Directory.Exists(source))
+                    {
+                        FolderImportPlan plan = BuildFolderImportPlan(source, showThreatMessages);
+                        if (plan.Errors.Count > 0)
+                        {
+                            result.Skipped.Add(source + " | Folder khong duoc ma hoa vi co file/folder loi ben trong");
+                            result.Skipped.AddRange(plan.Errors);
+                            continue;
+                        }
+
+                        string dest = GetAvailablePath(Path.Combine(targetVaultDir, Path.GetFileName(source) + ".k3folder"));
+                        CreateEncryptedFolderPackage(source, dest, plan);
+                        result.Count += plan.Files.Count;
+                        if (removeSource) SecureDeletePath(source);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    result.Skipped.Add(source + " | " + ex.Message);
                 }
             }
-            return count;
+            return result;
+        }
+
+        private void CopyDirectoryVerified(string sourceRoot, string targetRoot)
+        {
+            foreach (string dir in Directory.GetDirectories(sourceRoot, "*", SearchOption.AllDirectories))
+            {
+                string rel = dir.Substring(sourceRoot.Length).TrimStart('\\', '/');
+                Directory.CreateDirectory(Path.Combine(targetRoot, rel));
+            }
+
+            foreach (string file in Directory.GetFiles(sourceRoot, "*", SearchOption.AllDirectories))
+            {
+                string rel = file.Substring(sourceRoot.Length).TrimStart('\\', '/');
+                string dest = Path.Combine(targetRoot, rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                File.Copy(file, dest, false);
+
+                FileInfo srcInfo = new FileInfo(file);
+                FileInfo dstInfo = new FileInfo(dest);
+                if (!dstInfo.Exists || srcInfo.Length != dstInfo.Length)
+                    throw new IOException("Copy thieu hoac sai kich thuoc: " + rel);
+            }
+        }
+
+        private void CreateEncryptedFolderPackage(string sourceFolder, string destPackage, FolderImportPlan plan)
+        {
+            string tempRoot = Path.Combine(Path.GetTempPath(), "K3FolderPackage_" + Guid.NewGuid().ToString("N"));
+            string tempZip = Path.Combine(tempRoot, Path.GetFileName(sourceFolder) + ".zip");
+            string tempEncrypted = Path.Combine(tempRoot, Path.GetFileName(sourceFolder) + ".k3folder");
+            try
+            {
+                Directory.CreateDirectory(tempRoot);
+                ZipFile.CreateFromDirectory(sourceFolder, tempZip, CompressionLevel.NoCompression, false);
+                EncryptAndVerifyFile(tempZip, tempEncrypted, Path.GetFileName(sourceFolder) + ".zip");
+
+                Directory.CreateDirectory(Path.GetDirectoryName(destPackage));
+                File.Copy(tempEncrypted, destPackage, false);
+
+                FileInfo srcInfo = new FileInfo(tempEncrypted);
+                FileInfo dstInfo = new FileInfo(destPackage);
+                if (!dstInfo.Exists || srcInfo.Length != dstInfo.Length)
+                    throw new IOException("Copy package sang USB bi thieu hoac sai kich thuoc.");
+
+                CryptoEngine.VerifyEncryptedFile(destPackage);
+            }
+            catch
+            {
+                try { if (File.Exists(destPackage)) File.Delete(destPackage); } catch { }
+                throw;
+            }
+            finally
+            {
+                try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
+            }
+        }
+
+        private void DecryptFolderPackage(string packagePath, string targetDir)
+        {
+            string tempRoot = Path.Combine(Path.GetTempPath(), "K3FolderExtract_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(tempRoot);
+                CryptoEngine.DecryptFile(packagePath, tempRoot);
+                string[] zips = Directory.GetFiles(tempRoot, "*.zip", SearchOption.TopDirectoryOnly);
+                if (zips.Length != 1) throw new IOException("Package folder khong hop le.");
+
+                string folderName = Path.GetFileNameWithoutExtension(zips[0]);
+                string outputRoot = GetAvailablePath(Path.Combine(targetDir, folderName));
+                ZipFile.ExtractToDirectory(zips[0], outputRoot);
+            }
+            finally
+            {
+                try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
+            }
+        }
+
+        private void VerifyFolderCopyComplete(string folderRoot, int expectedEncryptedFiles)
+        {
+            int actual = Directory.GetFiles(folderRoot, "*.k3enc", SearchOption.AllDirectories).Length;
+            if (actual != expectedEncryptedFiles)
+                throw new IOException(string.Format("So file tren USB khong khop. Can {0}, co {1}.", expectedEncryptedFiles, actual));
+        }
+
+        private FolderImportPlan BuildFolderImportPlan(string root, bool showThreatMessages)
+        {
+            FolderImportPlan plan = new FolderImportPlan();
+            Stack<string> pending = new Stack<string>();
+            pending.Push(root);
+
+            while (pending.Count > 0)
+            {
+                string current = pending.Pop();
+
+                string[] files;
+                try { files = Directory.GetFiles(current); }
+                catch (Exception ex)
+                {
+                    plan.Errors.Add(current + " | Khong doc duoc thu muc: " + ex.Message);
+                    continue;
+                }
+
+                foreach (string file in files)
+                {
+                    try
+                    {
+                        using (FileStream stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 4096))
+                        {
+                            if (stream.Length < 0) { }
+                        }
+
+                        if (!IsFileCleanForUsbImport(file, showThreatMessages))
+                        {
+                            plan.Errors.Add(file + " | Bi chan boi quet an toan");
+                            continue;
+                        }
+
+                        plan.Files.Add(file);
+                    }
+                    catch (Exception ex)
+                    {
+                        plan.Errors.Add(file + " | Khong doc duoc file: " + ex.Message);
+                    }
+                }
+
+                string[] dirs;
+                try { dirs = Directory.GetDirectories(current); }
+                catch (Exception ex)
+                {
+                    plan.Errors.Add(current + " | Khong liet ke duoc thu muc con: " + ex.Message);
+                    continue;
+                }
+
+                foreach (string dir in dirs)
+                {
+                    plan.Directories.Add(dir);
+                    pending.Push(dir);
+                }
+            }
+
+            return plan;
+        }
+
+        private void ShowVaultImportResult(VaultImportResult result, string title)
+        {
+            if (result == null) return;
+            if (result.Skipped.Count == 0)
+            {
+                MessageBox.Show(string.Format("Da ma hoa {0} file vao Ket sat.", result.Count), title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string report = WriteVaultImportReport(result);
+            MessageBox.Show(
+                string.Format("Da ma hoa {0} file. Co {1} file/folder khong nhap duoc.\n\nDanh sach da ghi vao:\n{2}", result.Count, result.Skipped.Count, report),
+                title,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+
+        private string WriteVaultImportReport(VaultImportResult result)
+        {
+            string reportDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".k3_import_reports");
+            Directory.CreateDirectory(reportDir);
+            string report = Path.Combine(reportDir, "import-skipped-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".txt");
+            using (StreamWriter writer = new StreamWriter(report, false, Encoding.UTF8))
+            {
+                writer.WriteLine("K3 Import Report");
+                writer.WriteLine("Encrypted count: " + result.Count);
+                writer.WriteLine("Skipped count: " + result.Skipped.Count);
+                writer.WriteLine();
+                foreach (string skipped in result.Skipped)
+                    writer.WriteLine(skipped);
+            }
+            try { ConfigManager.HideManagedPath(reportDir); } catch { }
+            return report;
+        }
+
+        private IEnumerable<string> EnumerateDirectoriesSafe(string root)
+        {
+            Stack<string> pending = new Stack<string>();
+            pending.Push(root);
+            while (pending.Count > 0)
+            {
+                string current = pending.Pop();
+                string[] dirs;
+                try { dirs = Directory.GetDirectories(current); }
+                catch { continue; }
+
+                foreach (string dir in dirs)
+                {
+                    yield return dir;
+                    pending.Push(dir);
+                }
+            }
+        }
+
+        private IEnumerable<string> EnumerateFilesSafe(string root)
+        {
+            Stack<string> pending = new Stack<string>();
+            pending.Push(root);
+            while (pending.Count > 0)
+            {
+                string current = pending.Pop();
+                string[] files;
+                try { files = Directory.GetFiles(current); }
+                catch { files = new string[0]; }
+
+                foreach (string file in files)
+                    yield return file;
+
+                string[] dirs;
+                try { dirs = Directory.GetDirectories(current); }
+                catch { continue; }
+
+                foreach (string dir in dirs)
+                    pending.Push(dir);
+            }
+        }
+
+        private void TrySecureDeleteFile(string path)
+        {
+            try { CryptoEngine.SecureShredFile(path); } catch { try { File.Delete(path); } catch { } }
         }
 
         private bool IsFileCleanForUsbImport(string filePath, bool showMessage)
@@ -1576,7 +1868,7 @@ namespace AnToanUSB
             {
                 if (File.Exists(source))
                 {
-                    if (source.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase))
+                    if (IsK3EncryptedFile(source))
                     {
                         DecryptAnyEncryptedFile(source, targetDir);
                     }
@@ -1600,7 +1892,7 @@ namespace AnToanUSB
                         string rel = file.Substring(source.Length).TrimStart('\\', '/');
                         string destDir = Path.Combine(folderRoot, Path.GetDirectoryName(rel) ?? "");
                         Directory.CreateDirectory(destDir);
-                        if (file.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase))
+                        if (IsK3EncryptedFile(file))
                             DecryptAnyEncryptedFile(file, destDir);
                         else
                             File.Copy(file, GetAvailablePath(Path.Combine(destDir, Path.GetFileName(file))));
@@ -1621,7 +1913,7 @@ namespace AnToanUSB
                 string target = Path.Combine(targetDir, Path.GetFileName(source));
                 if (File.Exists(source))
                 {
-                    bool shouldDecrypt = source.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase) && (ConfigManager.AutoDecrypt || IsInsidePath(source, vaultPath));
+                    bool shouldDecrypt = IsK3EncryptedFile(source) && (ConfigManager.AutoDecrypt || IsInsidePath(source, vaultPath));
                     if (shouldDecrypt)
                     {
                         DecryptAnyEncryptedFile(source, targetDir);
@@ -1655,15 +1947,18 @@ namespace AnToanUSB
             reloadAction();
         }
 
-        private void PasteClipboardEncryptedTo(string targetVaultDir)
+        private async void PasteClipboardEncryptedTo(string targetVaultDir)
         {
             if (clipboardPaths.Count == 0 || string.IsNullOrEmpty(targetVaultDir)) return;
             Directory.CreateDirectory(targetVaultDir);
 
-            EncryptPathsToVault(clipboardPaths.ToArray(), targetVaultDir, clipboardIsCut);
+            string[] paths = clipboardPaths.ToArray();
+            bool isCut = clipboardIsCut;
+            VaultImportResult result = await EncryptPathsToVaultAsync(paths, targetVaultDir, isCut, "Dang dan va ma hoa vao Ket sat...");
 
-            if (clipboardIsCut) clipboardPaths.Clear();
+            if (isCut) clipboardPaths.Clear();
             LoadRightPane(currentRightPath);
+            ShowVaultImportResult(result, "Dan va ma hoa");
         }
 
         private void RenameSelectedItem(ListView list, Action reloadAction)
@@ -1807,7 +2102,7 @@ namespace AnToanUSB
                 return;
             }
 
-            bool encrypted = path.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase);
+            bool encrypted = IsK3EncryptedFile(path);
             string displayName = encrypted ? Path.GetFileNameWithoutExtension(path) : Path.GetFileName(path);
             if (!IsTextNoteName(displayName))
             {
@@ -1942,7 +2237,7 @@ namespace AnToanUSB
                     MessageBox.Show("Chỉ hỗ trợ mã hóa với khóa tùy chọn cho từng tệp.", "Mã hóa", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     continue;
                 }
-                if (path.EndsWith(".k3enc", StringComparison.OrdinalIgnoreCase))
+                if (IsK3EncryptedFile(path))
                 {
                     MessageBox.Show("Tệp này đã được mã hóa.", "Mã hóa", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     continue;
@@ -1960,7 +2255,11 @@ namespace AnToanUSB
 
         private void DecryptAnyEncryptedFile(string path, string destDir)
         {
-            if (CryptoEngine.IsCustomEncryptedFile(path))
+            if (IsK3FolderPackage(path))
+            {
+                DecryptFolderPackage(path, destDir);
+            }
+            else if (CryptoEngine.IsCustomEncryptedFile(path))
             {
                 string password = PromptForPassword("Giải mã bằng mật khẩu riêng", "Nhập mật khẩu riêng:", false);
                 if (string.IsNullOrEmpty(password)) throw new OperationCanceledException("Đã hủy nhập mật khẩu riêng.");
