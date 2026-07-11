@@ -28,6 +28,11 @@ namespace AnToanUSB
         public static string LoginTitle { get; set; }
         public static string LoginHelpText { get; set; }
         public static bool HideLoginHelp { get; set; }
+        public static bool AutoScanOnLogin { get; set; }
+        public static string SelfDestructMode { get; set; }
+        public static string K3RuleUpdateUrl { get; set; }
+        public static int FailedLoginCount { get; set; }
+        public static DateTime? LockedUntilUtc { get; set; }
 
         public static void LoadConfig()
         {
@@ -52,6 +57,12 @@ namespace AnToanUSB
                 LoginTitle = ExtractJsonValue(json, "login_title");
                 LoginHelpText = ExtractJsonValue(json, "login_help");
                 HideLoginHelp = ExtractJsonValue(json, "hide_login_help") == "true";
+                AutoScanOnLogin = ExtractJsonBool(json, "auto_scan_on_login");
+                SelfDestructMode = ExtractJsonValue(json, "self_destruct_mode");
+                K3RuleUpdateUrl = ExtractJsonValue(json, "k3_rule_update_url");
+                int failed;
+                FailedLoginCount = int.TryParse(ExtractJsonValue(json, "failed_login_count"), out failed) ? failed : 0;
+                LockedUntilUtc = ParseUtc(ExtractJsonValue(json, "locked_until_utc"));
                 if (string.IsNullOrEmpty(LoginTitle)) LoginTitle = "USB An Toàn K3";
                 if (string.IsNullOrEmpty(LoginHelpText)) LoginHelpText = "Trợ giúp HELP!";
 
@@ -60,6 +71,7 @@ namespace AnToanUSB
                     CryptoSalt = CreateSalt();
                     SaveAllConfig();
                 }
+                if (string.IsNullOrEmpty(SelfDestructMode)) SelfDestructMode = "off";
             }
             else
             {
@@ -77,6 +89,11 @@ namespace AnToanUSB
                 LoginTitle = "USB An Toàn K3";
                 LoginHelpText = "Trợ giúp HELP!";
                 HideLoginHelp = false;
+                AutoScanOnLogin = false;
+                SelfDestructMode = "off";
+                K3RuleUpdateUrl = "";
+                FailedLoginCount = 0;
+                LockedUntilUtc = null;
             }
 
             EnsureRuntimeStorage();
@@ -122,8 +139,17 @@ namespace AnToanUSB
             RealPasswordHash = HashPassword(realPass);
             DecoyPasswordHash = string.IsNullOrEmpty(decoyPass) ? "" : HashPassword(decoyPass);
             NeedsInitialSetup = false;
+            FailedLoginCount = 0;
+            LockedUntilUtc = null;
             SaveAllConfig();
             EnsureRuntimeStorage();
+        }
+
+        public static void SaveLoginFailureState(int failedCount, DateTime? lockedUntilUtc)
+        {
+            FailedLoginCount = failedCount;
+            LockedUntilUtc = lockedUntilUtc;
+            SaveAllConfig();
         }
 
         public static void SaveAllConfig()
@@ -131,10 +157,13 @@ namespace AnToanUSB
             string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".vault_config.json");
             if (string.IsNullOrEmpty(CryptoSalt)) CryptoSalt = CreateSalt();
 
-            string json = string.Format("{{\"hwid\":\"{0}\",\"real_hash\":\"{1}\",\"decoy_hash\":\"{2}\",\"crypto_salt\":\"{3}\",\"auto_enc_folder\":\"{4}\",\"max_size_bytes\":\"{5}\",\"auto_dec\":\"{6}\",\"show_hidden\":\"{7}\",\"wipe_history\":\"{8}\",\"wipe_macos\":\"{9}\",\"login_title\":\"{10}\",\"login_help\":\"{11}\",\"hide_login_help\":\"{12}\"}}",
+            string lockedUntil = LockedUntilUtc.HasValue ? LockedUntilUtc.Value.ToUniversalTime().ToString("o") : "";
+            string mode = string.IsNullOrEmpty(SelfDestructMode) ? "off" : SelfDestructMode;
+            string json = string.Format("{{\"hwid\":\"{0}\",\"real_hash\":\"{1}\",\"decoy_hash\":\"{2}\",\"crypto_salt\":\"{3}\",\"auto_enc_folder\":\"{4}\",\"max_size_bytes\":\"{5}\",\"auto_dec\":\"{6}\",\"show_hidden\":\"{7}\",\"wipe_history\":\"{8}\",\"wipe_macos\":\"{9}\",\"login_title\":\"{10}\",\"login_help\":\"{11}\",\"hide_login_help\":\"{12}\",\"auto_scan_on_login\":\"{13}\",\"self_destruct_mode\":\"{14}\",\"k3_rule_update_url\":\"{15}\",\"failed_login_count\":\"{16}\",\"locked_until_utc\":\"{17}\"}}",
                 EscapeJson(HwidLock), EscapeJson(RealPasswordHash), EscapeJson(DecoyPasswordHash), EscapeJson(CryptoSalt), EscapeJson(AutoEncryptFolder), MaxFileSizeBytes.ToString(), 
                 AutoDecrypt ? "true" : "false", ShowHidden ? "true" : "false", WipeHistory ? "true" : "false", WipeMacOs ? "true" : "false",
-                EscapeJson(LoginTitle), EscapeJson(LoginHelpText), HideLoginHelp ? "true" : "false");
+                EscapeJson(LoginTitle), EscapeJson(LoginHelpText), HideLoginHelp ? "true" : "false",
+                AutoScanOnLogin ? "true" : "false", EscapeJson(mode), EscapeJson(K3RuleUpdateUrl), FailedLoginCount, EscapeJson(lockedUntil));
             PrepareManagedFileForWrite(configPath);
             File.WriteAllText(configPath, json);
             HideRuntimePath(configPath);
@@ -310,6 +339,27 @@ namespace AnToanUSB
             if (end == -1) return "";
             
             return json.Substring(start + 1, end - start - 1);
+        }
+
+        private static bool ExtractJsonBool(string json, string key)
+        {
+            string value = ExtractJsonValue(json, key);
+            if (!string.IsNullOrEmpty(value)) return value == "true";
+
+            string searchKey = "\"" + key + "\":";
+            int idx = json.IndexOf(searchKey);
+            if (idx == -1) return false;
+            int start = idx + searchKey.Length;
+            while (start < json.Length && char.IsWhiteSpace(json[start])) start++;
+            return json.Substring(start).StartsWith("true", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static DateTime? ParseUtc(string value)
+        {
+            DateTime parsed;
+            if (DateTime.TryParse(value, null, System.Globalization.DateTimeStyles.RoundtripKind, out parsed))
+                return parsed.ToUniversalTime();
+            return null;
         }
     }
 }

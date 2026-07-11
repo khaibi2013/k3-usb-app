@@ -156,6 +156,16 @@ namespace AnToanUSB
             y += 40;
             Button btnSaveGeneral = new Button { Text = "Lưu thay đổi", Location = new Point(300, y), Width = 150, Height = 40, BackColor = Theme.Teal, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = Theme.FontHeading };
             try { btnSaveGeneral.Image = IconExtractor.GetSystemIcon("shell32.dll", 6, true); btnSaveGeneral.TextImageRelation = TextImageRelation.ImageBeforeText; } catch { }
+            CheckBox chkAutoScanLogin = new CheckBox { Text = "Tu dong mo quet virus sau khi dang nhap", Location = new Point(30, y), AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Regular) };
+            y += 30;
+            Label lblSelfDestruct = new Label { Text = "Sai mat khau 10 lan:", Location = new Point(30, y + 4), AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold) };
+            ComboBox cmbSelfDestruct = new ComboBox { Location = new Point(180, y), Width = 190, DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbSelfDestruct.Items.AddRange(new string[] { "off", "lock", "wipe_real", "wipe_all" });
+            y += 34;
+            Label lblRuleUrl = new Label { Text = "URL cap nhat k3-rules.json:", Location = new Point(30, y + 4), AutoSize = true };
+            TextBox txtRuleUrl = new TextBox { Location = new Point(210, y), Width = 430 };
+            y += 45;
+            btnSaveGeneral.Location = new Point(300, y);
             ConfigManager.LoadConfig();
 
             chkAutoEnc.Checked = ConfigManager.AutoEncryptFolder != "";
@@ -170,6 +180,10 @@ namespace AnToanUSB
             chkShowHidden.Checked = ConfigManager.ShowHidden;
             chkWipeHistory.Checked = ConfigManager.WipeHistory;
             chkWipeMacOs.Checked = ConfigManager.WipeMacOs;
+            chkAutoScanLogin.Checked = ConfigManager.AutoScanOnLogin;
+            cmbSelfDestruct.SelectedItem = string.IsNullOrEmpty(ConfigManager.SelfDestructMode) ? "off" : ConfigManager.SelfDestructMode;
+            if (cmbSelfDestruct.SelectedIndex < 0) cmbSelfDestruct.SelectedIndex = 0;
+            txtRuleUrl.Text = ConfigManager.K3RuleUpdateUrl ?? "";
 
             btnSaveGeneral.Click += (s, e) => {
                 ConfigManager.AutoEncryptFolder = chkAutoEnc.Checked ? cmbFolder.SelectedItem.ToString() : "";
@@ -183,6 +197,15 @@ namespace AnToanUSB
                 ConfigManager.ShowHidden = chkShowHidden.Checked;
                 ConfigManager.WipeHistory = chkWipeHistory.Checked;
                 ConfigManager.WipeMacOs = chkWipeMacOs.Checked;
+                string selectedPolicy = cmbSelfDestruct.SelectedItem != null ? cmbSelfDestruct.SelectedItem.ToString() : "off";
+                if ((selectedPolicy == "wipe_real" || selectedPolicy == "wipe_all") && selectedPolicy != ConfigManager.SelfDestructMode)
+                {
+                    if (MessageBox.Show("Chinh sach nay se xoa du lieu khi sai 10 lan: " + selectedPolicy + "\nBan chac chan muon luu?", "Xac nhan chinh sach tu huy", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                        return;
+                }
+                ConfigManager.AutoScanOnLogin = chkAutoScanLogin.Checked;
+                ConfigManager.SelfDestructMode = selectedPolicy;
+                ConfigManager.K3RuleUpdateUrl = txtRuleUrl.Text.Trim();
 
                 ConfigManager.SaveAllConfig();
                 MessageBox.Show("Đã lưu các tùy chỉnh Cài đặt chung!", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -192,7 +215,7 @@ namespace AnToanUSB
             tabGeneral.Controls.AddRange(new Control[] {
                 chkAutoEnc, cmbFolder, lblAutoEncDesc, lblMaxFileSize, cmbMaxSize,
                 chkAutoDec, lblAutoDecDesc, chkShowHidden, lblShowHiddenDesc,
-                chkWipeHistory, chkWipeMacOs, btnSaveGeneral
+                chkWipeHistory, chkWipeMacOs, chkAutoScanLogin, lblSelfDestruct, cmbSelfDestruct, lblRuleUrl, txtRuleUrl, btnSaveGeneral
             });
 
             tabControl.TabPages.Add(tabLoginPwd);

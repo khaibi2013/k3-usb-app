@@ -55,6 +55,7 @@ namespace AnToanUSB
         private DateTime lastDevicePrompt = DateTime.MinValue;
         private System.Windows.Forms.Timer appDriveMonitorTimer;
         private bool isAutoExitingForRemovedDrive = false;
+        private bool autoScanStarted = false;
 
         private ImageList sysIconsSmall;
         private ImageList sysIconsLarge;
@@ -84,7 +85,17 @@ namespace AnToanUSB
 
             SetupAutoEncrypt();
             StartAppDriveMonitor();
-            Shown += (s, e) => BeginInvoke(new Action(LoadInitialDataFast));
+            Shown += (s, e) => BeginInvoke(new Action(() => { LoadInitialDataFast(); StartAutoScanOnLoginIfNeeded(); }));
+        }
+
+        private void StartAutoScanOnLoginIfNeeded()
+        {
+            if (autoScanStarted || !ConfigManager.AutoScanOnLogin) return;
+            autoScanStarted = true;
+            string root = Path.GetPathRoot(AppDomain.CurrentDomain.BaseDirectory);
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) root = AppDomain.CurrentDomain.BaseDirectory;
+            using (AntivirusForm form = new AntivirusForm(root))
+                form.ShowDialog(this);
         }
 
         private void LoadInitialDataFast()
@@ -1507,10 +1518,11 @@ namespace AnToanUSB
                             continue;
                         }
                         string rel = file.Substring(source.Length).TrimStart('\\', '/');
+                        string storedName = Path.Combine(Path.GetFileName(source), rel).Replace('\\', '/');
                         string destDir = Path.Combine(folderRoot, Path.GetDirectoryName(rel) ?? "");
                         Directory.CreateDirectory(destDir);
                         string dest = GetAvailablePath(Path.Combine(destDir, Path.GetFileName(file) + ".k3enc"));
-                        EncryptAndVerifyFile(file, dest);
+                        EncryptAndVerifyFile(file, dest, storedName);
                         count++;
                     }
                     if (removeSource && allFilesAccepted) SecureDeletePath(source);
@@ -1861,6 +1873,12 @@ namespace AnToanUSB
         private void EncryptAndVerifyFile(string sourceFile, string destFile)
         {
             CryptoEngine.EncryptFile(sourceFile, destFile);
+            CryptoEngine.VerifyEncryptedFile(destFile);
+        }
+
+        private void EncryptAndVerifyFile(string sourceFile, string destFile, string storedName)
+        {
+            CryptoEngine.EncryptFile(sourceFile, destFile, storedName);
             CryptoEngine.VerifyEncryptedFile(destFile);
         }
 

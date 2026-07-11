@@ -149,6 +149,13 @@ namespace AnToanUSB
             try
             {
                 ConfigManager.LoadConfig();
+                failedAttempts = ConfigManager.FailedLoginCount;
+                if (ConfigManager.LockedUntilUtc.HasValue && ConfigManager.LockedUntilUtc.Value > DateTime.UtcNow)
+                {
+                    TimeSpan remaining = ConfigManager.LockedUntilUtc.Value - DateTime.UtcNow;
+                    MessageBox.Show(string.Format("Dang bi khoa dang nhap. Vui long thu lai sau {0} phut {1} giay.", (int)remaining.TotalMinutes, remaining.Seconds), "Bao mat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
                 if (ConfigManager.NeedsInitialSetup)
                 {
                     if (ShowInitialSetup())
@@ -169,16 +176,20 @@ namespace AnToanUSB
                 {
                     CryptoEngine.Authenticate(pwd);
                     failedAttempts = 0;
+                    ConfigManager.SaveLoginFailureState(0, null);
                     CompleteSuccessfulLogin();
                 }
                 else
                 {
                     SetConnectionStatus(false);
+                    HandleFailedLogin();
+                    return;
+#if false
                     failedAttempts++;
                     if (failedAttempts >= 10)
                     {
                         MessageBox.Show("CẢNH BÁO: Bạn đã nhập sai 10 lần! Hệ thống đang tự hủy toàn bộ dữ liệu an toàn...", "Bảo mật", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        SelfDestructVault();
+                        SelfDestructVault("wipe_all");
                         Application.Exit();
                     }
                     else if (failedAttempts >= 5)
@@ -203,11 +214,71 @@ namespace AnToanUSB
                         MessageBox.Show(string.Format("Mật khẩu không đúng! Còn {0} lần sai trước khi khóa 5 phút.", 5 - failedAttempts), "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 }
+#endif
+                }
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private void HandleFailedLogin()
+        {
+            failedAttempts++;
+
+            if (failedAttempts >= 10)
+            {
+                string mode = string.IsNullOrEmpty(ConfigManager.SelfDestructMode) ? "off" : ConfigManager.SelfDestructMode;
+                if (mode == "lock")
+                {
+                    ConfigManager.SaveLoginFailureState(failedAttempts, DateTime.MaxValue.ToUniversalTime());
+                    MessageBox.Show("Nhap sai 10 lan. USB da bi khoa dang nhap theo chinh sach.", "Bao mat", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    Application.Exit();
+                    return;
+                }
+                if (mode == "wipe_real" || mode == "wipe_all")
+                {
+                    MessageBox.Show("Nhap sai 10 lan. Dang thuc thi chinh sach tu huy: " + mode, "Bao mat", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    SelfDestructVault(mode);
+                    Application.Exit();
+                    return;
+                }
+
+                LockForFiveMinutes(failedAttempts);
+                MessageBox.Show("Nhap sai 10 lan. Chinh sach tu huy dang tat, dang khoa dang nhap 5 phut.", "Bao mat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (failedAttempts >= 5)
+            {
+                LockForFiveMinutes(failedAttempts);
+                MessageBox.Show(string.Format("Nhap sai {0} lan. Dang nhap bi khoa 5 phut.", failedAttempts), "Bao mat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            ConfigManager.SaveLoginFailureState(failedAttempts, null);
+            MessageBox.Show(string.Format("Mat khau khong dung. Con {0} lan sai truoc khi khoa 5 phut.", 5 - failedAttempts), "Loi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
+        private void LockForFiveMinutes(int attempts)
+        {
+            DateTime until = DateTime.UtcNow.AddMinutes(5);
+            ConfigManager.SaveLoginFailureState(attempts, until);
+            btnLogin.Enabled = false;
+            txtPassword.Enabled = false;
+            System.Windows.Forms.Timer unlockTimer = new System.Windows.Forms.Timer();
+            unlockTimer.Interval = 5 * 60 * 1000;
+            unlockTimer.Tick += (s, e) =>
+            {
+                unlockTimer.Stop();
+                unlockTimer.Dispose();
+                ConfigManager.SaveLoginFailureState(attempts, null);
+                btnLogin.Enabled = true;
+                txtPassword.Enabled = true;
+                txtPassword.Focus();
+            };
+            unlockTimer.Start();
         }
 
         private bool ShowInitialSetup()
@@ -220,11 +291,15 @@ namespace AnToanUSB
             using (TextBox confirm = new TextBox())
             using (Label lblDecoy = new Label())
             using (TextBox decoy = new TextBox())
+            using (Label lblPolicy = new Label())
+            using (ComboBox cmbPolicy = new ComboBox())
+            using (CheckBox chkAutoScan = new CheckBox())
+            using (Label lblDone = new Label())
             using (Button ok = new Button())
             using (Button cancel = new Button())
             {
                 dialog.Text = "Thiết lập lần đầu";
-                dialog.Size = new Size(430, 290);
+                dialog.Size = new Size(500, 430);
                 dialog.StartPosition = FormStartPosition.CenterParent;
                 dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
                 dialog.MaximizeBox = false;
@@ -259,14 +334,33 @@ namespace AnToanUSB
                 decoy.PasswordChar = '●';
 
                 ok.Text = "Tạo két sắt";
-                ok.Location = new Point(188, 214);
+                lblPolicy.Text = "Buoc 3: Chinh sach khi sai 10 lan";
+                lblPolicy.Location = new Point(24, 208);
+                lblPolicy.AutoSize = true;
+                cmbPolicy.Location = new Point(24, 230);
+                cmbPolicy.Width = 360;
+                cmbPolicy.DropDownStyle = ComboBoxStyle.DropDownList;
+                cmbPolicy.Items.AddRange(new string[] { "off", "lock", "wipe_real", "wipe_all" });
+                cmbPolicy.SelectedIndex = 0;
+
+                chkAutoScan.Text = "Buoc 4: Tu dong quet USB sau khi dang nhap";
+                chkAutoScan.Location = new Point(24, 264);
+                chkAutoScan.AutoSize = true;
+
+                lblDone.Text = "Buoc 5: Kiem tra lai thong tin roi bam Tao ket sat.";
+                lblDone.Location = new Point(24, 296);
+                lblDone.Width = 430;
+                lblDone.Height = 32;
+                lblDone.ForeColor = Theme.TextMute;
+
+                ok.Location = new Point(268, 340);
                 ok.Width = 96;
                 ok.DialogResult = DialogResult.OK;
                 cancel.Text = "Hủy";
-                cancel.Location = new Point(292, 214);
+                cancel.Location = new Point(372, 340);
                 cancel.Width = 92;
                 cancel.DialogResult = DialogResult.Cancel;
-                dialog.Controls.AddRange(new Control[] { title, lblReal, real, lblConfirm, confirm, lblDecoy, decoy, ok, cancel });
+                dialog.Controls.AddRange(new Control[] { title, lblReal, real, lblConfirm, confirm, lblDecoy, decoy, lblPolicy, cmbPolicy, chkAutoScan, lblDone, ok, cancel });
                 dialog.AcceptButton = ok;
                 dialog.CancelButton = cancel;
 
@@ -287,25 +381,36 @@ namespace AnToanUSB
                     return false;
                 }
 
+                string selectedPolicy = cmbPolicy.SelectedItem != null ? cmbPolicy.SelectedItem.ToString() : "off";
+                if (selectedPolicy == "wipe_real" || selectedPolicy == "wipe_all")
+                {
+                    if (MessageBox.Show("Chinh sach nay se xoa du lieu khi sai 10 lan: " + selectedPolicy + "\nBan chac chan muon bat?", "Xac nhan chinh sach tu huy", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                        return false;
+                }
+
+                ConfigManager.SelfDestructMode = selectedPolicy;
+                ConfigManager.AutoScanOnLogin = chkAutoScan.Checked;
                 ConfigManager.SavePasswords(real.Text, decoy.Text);
                 txtPassword.Text = real.Text;
                 return true;
             }
         }
 
-        private void SelfDestructVault()
+        private void SelfDestructVault(string mode)
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string[] targets = {
-                ".vault",
-                ".vault_decoy",
-                "BaoMat",
-                ".k3_quarantine",
-                ".k3_recovery_snapshots",
-                ".k3_trusted_hashes.txt",
-                ".k3_history.log",
-                ".vault_config.json"
-            };
+            string[] targets = mode == "wipe_real"
+                ? new string[] { ".vault" }
+                : new string[] {
+                    ".vault",
+                    ".vault_decoy",
+                    "BaoMat",
+                    ".k3_quarantine",
+                    ".k3_recovery_snapshots",
+                    ".k3_trusted_hashes.txt",
+                    ".k3_history.log",
+                    ".vault_config.json"
+                };
 
             foreach (string target in targets)
                 SecureDeletePath(System.IO.Path.Combine(baseDir, target));

@@ -41,6 +41,11 @@ namespace AnToanUSB
 
         public static void EncryptFile(string sourceFile, string destFile)
         {
+            EncryptFile(sourceFile, destFile, Path.GetFileName(sourceFile));
+        }
+
+        public static void EncryptFile(string sourceFile, string destFile, string storedName)
+        {
             if (!IsAuthenticated) throw new UnauthorizedAccessException("Not authenticated.");
 
             byte[] iv = new byte[IvSize];
@@ -76,7 +81,7 @@ namespace AnToanUSB
             }
 
             // Structure: [IV(16)] [MAC(32)] [IsCompressed(1)] [NameLen(4)] [NameBytes] [Encrypted]
-            string baseName = Path.GetFileName(sourceFile);
+            string baseName = string.IsNullOrWhiteSpace(storedName) ? Path.GetFileName(sourceFile) : storedName;
             byte[] nameBytes = Encoding.UTF8.GetBytes(baseName);
             byte[] nameLenBytes = BitConverter.GetBytes(nameBytes.Length);
 

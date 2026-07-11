@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Text;
 using System.Diagnostics;
 using System.Collections.Generic;
+using System.Net;
 
 namespace AnToanUSB
 {
@@ -140,8 +141,12 @@ namespace AnToanUSB
                 ClamAvManager.EnsurePortableLayout();
                 Process.Start(new ProcessStartInfo { FileName = ClamAvManager.ClamRoot, UseShellExecute = true });
             };
+            Button btnUpdateRules = new Button { Text = "Cap nhat K3 rules", Location = new Point(706, 250), Width = 150, Height = 35, FlatStyle = FlatStyle.Flat, BackColor = Color.White, Font = btnFont };
+            btnUpdateRules.Click += (s, e) => UpdateK3RulesFromUrl();
+            Button btnImportRules = new Button { Text = "Nhap rules", Location = new Point(870, 250), Width = 120, Height = 35, FlatStyle = FlatStyle.Flat, BackColor = Color.White, Font = btnFont };
+            btnImportRules.Click += (s, e) => ImportK3RulesFromFile();
             lblInfoQuarantine = new Label { Text = "", Location = new Point(20, 300), Width = 1000, Height = 80, Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.FromArgb(16, 124, 16) };
-            tabInfo.Controls.AddRange(new Control[] { lblInfoEngine, btnRefreshInfo, btnOpenSnapshots, btnUpdateClam, btnOpenClam, lblInfoQuarantine });
+            tabInfo.Controls.AddRange(new Control[] { lblInfoEngine, btnRefreshInfo, btnOpenSnapshots, btnUpdateClam, btnOpenClam, btnUpdateRules, btnImportRules, lblInfoQuarantine });
 
             lvLog = new ListView { Location = new Point(10, 15), Width = 1040, Height = 395, View = View.Details, FullRowSelect = true, GridLines = true, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
             lvLog.Columns.Add("Thời gian", 150);
@@ -161,11 +166,13 @@ namespace AnToanUSB
             lvQuarantine.Columns.Add("Ngày cách ly", 150);
             lvQuarantine.Columns.Add("Dấu hiệu", 180);
             lvQuarantine.Columns.Add("Tệp cách ly", 240);
-            tabQuarantine.Controls.AddRange(new Control[] { btnQReload, btnQRestore, btnQDelete, btnQOpen, lvQuarantine });
+            Button btnQTrust = new Button { Text = "Tin cay & khoi phuc", Location = new Point(530, 10), Width = 150, Height = 35, FlatStyle = FlatStyle.Flat, BackColor = Color.White, Font = btnFont };
+            tabQuarantine.Controls.AddRange(new Control[] { btnQReload, btnQRestore, btnQDelete, btnQOpen, btnQTrust, lvQuarantine });
 
             btnQReload.Click += (s, e) => LoadQuarantineList();
             btnQRestore.Click += (s, e) => RestoreSelectedQuarantine();
             btnQDelete.Click += (s, e) => DeleteSelectedQuarantine();
+            btnQTrust.Click += (s, e) => TrustAndRestoreSelectedQuarantine();
             btnQOpen.Click += (s, e) => {
                 if (!Directory.Exists(QuarantineDir)) Directory.CreateDirectory(QuarantineDir);
                 Process.Start(new ProcessStartInfo { FileName = QuarantineDir, UseShellExecute = true });
@@ -409,6 +416,70 @@ namespace AnToanUSB
                 int qCount = Directory.Exists(QuarantineDir) ? Directory.GetFiles(QuarantineDir, "*.k3q").Length : 0;
                 lblInfoQuarantine.Text = string.Format("Khu cách ly hiện có {0} tệp. Lần quét gần nhất: Sạch={1}, Nhiễm={2}, Bỏ qua={3}, Tổng={4}.", qCount, cleanCount, infectedCount, skippedCount, totalCount);
             }
+        }
+
+        private void UpdateK3RulesFromUrl()
+        {
+            ConfigManager.LoadConfig();
+            if (string.IsNullOrWhiteSpace(ConfigManager.K3RuleUpdateUrl))
+            {
+                MessageBox.Show("Chua cau hinh URL k3-rules.json trong Cai dat chung.", "K3 rules", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            try
+            {
+                using (WebClient client = new WebClient())
+                {
+                    string json = client.DownloadString(ConfigManager.K3RuleUpdateUrl);
+                    InstallK3RulesJson(json);
+                }
+                AddLog("INFO", "Da cap nhat K3 rules tu URL.");
+                MessageBox.Show("Da cap nhat K3 rules.", "K3 rules", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                AddLog("ERROR", "Cap nhat K3 rules that bai: " + ex.Message);
+                MessageBox.Show(ex.Message, "K3 rules", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void ImportK3RulesFromFile()
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog { Title = "Nhap k3-rules.json", Filter = "JSON (*.json)|*.json|All files (*.*)|*.*" })
+            {
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    InstallK3RulesJson(File.ReadAllText(ofd.FileName, Encoding.UTF8));
+                    AddLog("INFO", "Da nhap K3 rules offline: " + ofd.FileName);
+                    MessageBox.Show("Da nhap K3 rules.", "K3 rules", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "K3 rules", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+        }
+
+        private void InstallK3RulesJson(string json)
+        {
+            if (!IsValidK3RulesJson(json)) throw new InvalidDataException("File K3 rules khong hop le.");
+            string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "rules");
+            Directory.CreateDirectory(dir);
+            string target = Path.Combine(dir, "k3-rules.json");
+            ConfigManager.PrepareManagedFileForWrite(target);
+            File.WriteAllText(target, json, new UTF8Encoding(false));
+            ConfigManager.HideManagedPath(target);
+            try { K3IntegrityManager.WriteManifest(); } catch { }
+        }
+
+        private bool IsValidK3RulesJson(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json) || json.Length > 2 * 1024 * 1024) return false;
+            string lower = json.ToLowerInvariant();
+            return lower.Contains("\"version\"") &&
+                (lower.Contains("\"namerules\"") || lower.Contains("\"contentrules\"")) &&
+                json.TrimStart().StartsWith("{");
         }
 
         private async Task UpdateClamAvDatabaseAsync(Button button)
@@ -770,6 +841,27 @@ namespace AnToanUSB
             }
             LoadQuarantineList();
             if (count > 0) MessageBox.Show(string.Format("Đã khôi phục {0} tệp.", count), "Khôi phục", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void TrustAndRestoreSelectedQuarantine()
+        {
+            int selectedCount = lvQuarantine.CheckedItems.Count > 0 ? lvQuarantine.CheckedItems.Count : lvQuarantine.SelectedItems.Count;
+            if (selectedCount == 0)
+            {
+                MessageBox.Show("Vui long chon tep trong khu cach ly.", "Khu cach ly", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (MessageBox.Show("Danh dau file da chon la tin cay va khoi phuc ve duong dan goc?", "False positive", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
+            System.Collections.IEnumerable itemsToProcess = lvQuarantine.CheckedItems.Count > 0 ? (System.Collections.IEnumerable)lvQuarantine.CheckedItems : (System.Collections.IEnumerable)lvQuarantine.SelectedItems;
+            foreach (ListViewItem item in itemsToProcess)
+            {
+                string qFile = item.Tag != null ? item.Tag.ToString() : "";
+                if (File.Exists(qFile)) TrustedFileManager.TrustFile(qFile);
+            }
+            RestoreSelectedQuarantine();
         }
 
         private void DeleteSelectedQuarantine()

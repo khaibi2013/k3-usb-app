@@ -65,6 +65,9 @@ namespace AnToanUSB
             Button btnRepair = new Button { Text = "Tu sua cau truc USB", Location = new Point(622, 26), Width = 180, Height = 42, BackColor = Theme.TealDark, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = Theme.FontHeading };
             btnRepair.FlatAppearance.BorderSize = 0;
             btnRepair.Click += (s, e) => { ConfigManager.EnsureRuntimeStorage(); ConfigManager.EnsurePortableMetadata(); LoadStatus(); };
+            Button btnManifest = new Button { Text = "Tao manifest", Location = new Point(622, 76), Width = 180, Height = 36, BackColor = Theme.Amber, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = Theme.FontHeading };
+            btnManifest.FlatAppearance.BorderSize = 0;
+            btnManifest.Click += (s, e) => { K3IntegrityManager.WriteManifest(); LoadStatus(); MessageBox.Show("Da tao .k3_integrity_manifest.json.", "Integrity", MessageBoxButtons.OK, MessageBoxIcon.Information); };
 
             progress = new ProgressBar { Location = new Point(24, 88), Width = 780, Height = 14, Style = ProgressBarStyle.Continuous };
             Label note = new Label
@@ -75,7 +78,7 @@ namespace AnToanUSB
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextMute
             };
-            bottom.Controls.AddRange(new Control[] { btnVerify, btnReload, btnTrusted, btnRepair, progress, note });
+            bottom.Controls.AddRange(new Control[] { btnVerify, btnReload, btnTrusted, btnRepair, btnManifest, progress, note });
 
             Controls.Add(bottom);
             Controls.Add(lvStatus);
@@ -101,6 +104,7 @@ namespace AnToanUSB
             int encryptedCount = Directory.Exists(vaultPath) ? Directory.GetFiles(vaultPath, "*.k3enc", SearchOption.AllDirectories).Length : 0;
             bool readOnlyEnabled = UsbHelper.IsReadOnlyEnabled();
             bool canWrite = UsbHelper.CanWriteToCurrentAppDrive();
+            K3IntegrityResult integrity = K3IntegrityManager.VerifyManifest();
 
             AddStatus("Ket sat chinh", Directory.Exists(realVault), Directory.Exists(realVault) ? "San sang" : "Thieu .vault", "App co the tu tao lai cau truc rong.");
             AddStatus("Ket sat gia", Directory.Exists(decoyVault), Directory.Exists(decoyVault) ? "San sang" : "Thieu .vault_decoy", "Nen dung khi can mat khau gia.");
@@ -112,6 +116,7 @@ namespace AnToanUSB
             AddStatus("Autorun USB", File.Exists(autorun), File.Exists(autorun) ? "Da co" : "Thieu", "Dung de hien ten/icon/menu mo app.");
             AddStatus("Logo USB", File.Exists(icon), File.Exists(icon) ? "Da co" : "Thieu icon.png", "Can de man hinh splash/login dep hon.");
             AddStatus("K3 AutoLauncher", File.Exists(launcher) && File.Exists(installLauncher), File.Exists(launcher) ? "Da dong goi" : "Chua co", "Cai tren may can tu mo khi cam USB.");
+            AddStatus("Toan ven app/rules", !integrity.HasWarning, IntegrityStatusText(integrity), IntegritySuggestionText(integrity));
             AddStatus("Tep ma hoa", encryptedCount > 0, encryptedCount + " tep .k3enc", encryptedCount > 0 ? "Co du lieu trong ket." : "Hay dua file vao BaoMat hoac Ket sat.");
             AddStatus("Che do truy cap", !ConfigManager.IsDecoyMode, ConfigManager.IsDecoyMode ? "Ket gia" : "Ket that", ConfigManager.IsDecoyMode ? "Dang quan ly ket gia." : "Dang quan ly ket that.");
 
@@ -127,6 +132,21 @@ namespace AnToanUSB
             var item = new ListViewItem(new[] { name, status, suggestion });
             item.ForeColor = ok ? Theme.TealDark : Theme.AmberDark;
             lvStatus.Items.Add(item);
+        }
+
+        private string IntegrityStatusText(K3IntegrityResult result)
+        {
+            if (!result.ManifestExists) return "Chua co manifest";
+            if (!result.HasWarning) return "Hop le";
+            return "Canh bao";
+        }
+
+        private string IntegritySuggestionText(K3IntegrityResult result)
+        {
+            if (!result.ManifestExists) return ".k3_integrity_manifest.json";
+            if (!result.HasWarning) return result.Checked + " file dung hash";
+            if (result.Failed.Count > 0) return "Sai hash: " + string.Join(", ", result.Failed.ToArray());
+            return "Thieu: " + string.Join(", ", result.Missing.ToArray());
         }
 
         private void VerifyVaultIntegrity()
