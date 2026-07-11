@@ -67,6 +67,8 @@ Khi user chon/kéo folder vao ket:
    - Khong de lai package hong trong ket.
 3. Neu OK:
    - Tao zip tam o local temp, khong tao truc tiep tren USB.
+   - Ten file/folder trong zip phai la UTF-8 va normalize NFC de Windows khong hien mojibake.
+   - Khong dua metadata macOS vao zip: `.DS_Store`, `._*`, `__MACOSX`.
    - Ma hoa zip thanh temp `.k3folder` o local temp.
    - Verify HMAC/decrypt stream cua package.
    - Copy 1 file `.k3folder` sang `.vault` hoac `.vault_decoy`.

@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO.Compression;
+using System.Globalization;
 
 namespace AnToanUSB
 {
@@ -549,6 +550,7 @@ namespace AnToanUSB
                 foreach (var d in Directory.GetDirectories(path))
                 {
                     var di = new DirectoryInfo(d);
+                    if (IsInK3FolderView(path) && IsMacMetadataName(di.Name)) continue;
                     if ((di.Attributes & FileAttributes.Hidden) == FileAttributes.Hidden && !showHiddenFiles) continue;
 
                     var item = new ListViewItem(new[] { Path.GetFileName(d), "Thư mục", "", di.LastWriteTime.ToString() });
@@ -595,7 +597,7 @@ namespace AnToanUSB
 
                 if (IsViewingK3FolderPackage() && string.Equals(path, currentK3FolderViewRoot, StringComparison.OrdinalIgnoreCase))
                 {
-                    var upItem = new ListViewItem(new[] { "..", "Back to vault", "", "" });
+                    var upItem = new ListViewItem(new[] { "..", "Quay lai ket", "", "" });
                     upItem.Tag = Path.GetDirectoryName(currentK3FolderPackagePath) ?? vaultPath;
                     upItem.ImageKey = "folder";
                     listRight.Items.Add(upItem);
@@ -619,6 +621,7 @@ namespace AnToanUSB
 
                 foreach (var f in Directory.GetFiles(path))
                 {
+                    if (IsInK3FolderView(path) && IsMacMetadataName(Path.GetFileName(f))) continue;
                     if (IsK3FolderPackage(f))
                     {
                         var fi = new FileInfo(f);
@@ -653,7 +656,7 @@ namespace AnToanUSB
                         var fi = new FileInfo(f);
                         var item = new ListViewItem(new[] { fi.Name, "File Chưa mã hóa", (fi.Length / 1024).ToString() + " KB", fi.LastWriteTime.ToShortDateString() });
                         item.Tag = f;
-                        item.ForeColor = Color.DarkOrange;
+                        if (!IsInK3FolderView(path)) item.ForeColor = Color.DarkOrange;
 
                         string ext = Path.GetExtension(f).ToLower();
                         if (string.IsNullOrEmpty(ext)) item.ImageKey = "file";
@@ -1766,14 +1769,100 @@ namespace AnToanUSB
                 string[] zips = Directory.GetFiles(tempRoot, "*.zip", SearchOption.TopDirectoryOnly);
                 if (zips.Length != 1) throw new IOException("Package folder khong hop le.");
 
-                string folderName = Path.GetFileNameWithoutExtension(zips[0]);
+                string folderName = RepairZipEntryName(Path.GetFileNameWithoutExtension(zips[0]));
                 string outputRoot = GetAvailablePath(Path.Combine(targetDir, folderName));
-                ZipFile.ExtractToDirectory(zips[0], outputRoot);
+                ExtractZipToDirectorySafe(zips[0], outputRoot);
             }
             finally
             {
                 try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
             }
+        }
+
+        private void ExtractZipToDirectorySafe(string zipPath, string destinationRoot)
+        {
+            string basePath = Path.GetFullPath(destinationRoot);
+            Directory.CreateDirectory(basePath);
+
+            using (ZipArchive archive = ZipFile.OpenRead(zipPath))
+            {
+                foreach (ZipArchiveEntry entry in archive.Entries)
+                {
+                    string safeRelativePath = SafeZipRelativePath(entry.FullName);
+                    if (string.IsNullOrEmpty(safeRelativePath)) continue;
+
+                    string fullPath = Path.GetFullPath(Path.Combine(basePath, safeRelativePath));
+                    string prefix = basePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                    if (!fullPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !string.Equals(fullPath, basePath, StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("Zip entry tried to write outside destination.");
+
+                    if (string.IsNullOrEmpty(entry.Name))
+                    {
+                        Directory.CreateDirectory(fullPath);
+                        continue;
+                    }
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
+                    using (Stream source = entry.Open())
+                    using (FileStream dest = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        source.CopyTo(dest);
+                    }
+                }
+            }
+        }
+
+        private string SafeZipRelativePath(string entryName)
+        {
+            if (string.IsNullOrWhiteSpace(entryName)) return "";
+            string normalized = entryName.Replace('\\', '/');
+            if (normalized.StartsWith("/", StringComparison.Ordinal) || normalized.Contains(":")) throw new IOException("Invalid zip path.");
+
+            List<string> parts = new List<string>();
+            foreach (string rawPart in normalized.Split('/'))
+            {
+                if (string.IsNullOrEmpty(rawPart) || rawPart == ".") continue;
+                string part = RepairZipEntryName(rawPart);
+                if (part == ".." || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) throw new IOException("Invalid zip path.");
+                if (IsMacMetadataName(part)) return "";
+                parts.Add(part);
+            }
+            return parts.Count == 0 ? "" : Path.Combine(parts.ToArray());
+        }
+
+        private string RepairZipEntryName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return name;
+            string best = name;
+            try
+            {
+                Encoding win1252 = Encoding.GetEncoding(1252);
+                byte[] bytes = win1252.GetBytes(name);
+                string candidate = new UTF8Encoding(false, true).GetString(bytes);
+                if (MojibakeScore(candidate) < MojibakeScore(name)) best = candidate;
+            }
+            catch { }
+            return best.Normalize(NormalizationForm.FormC);
+        }
+
+        private int MojibakeScore(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return 0;
+            int score = 0;
+            string markers = "ÃÂÄÅÆÌÍÐÑÒÓÔÕÖØÙÚÛÜÝÞß";
+            foreach (char c in value)
+            {
+                if (markers.IndexOf(c) >= 0) score += 2;
+                if (char.GetUnicodeCategory(c) == UnicodeCategory.Control) score += 3;
+            }
+            return score;
+        }
+
+        private bool IsMacMetadataName(string name)
+        {
+            return string.Equals(name, ".DS_Store", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(name, "__MACOSX", StringComparison.OrdinalIgnoreCase) ||
+                   (!string.IsNullOrEmpty(name) && name.StartsWith("._", StringComparison.Ordinal));
         }
 
         private void VerifyFolderCopyComplete(string folderRoot, int expectedEncryptedFiles)
